@@ -25,7 +25,7 @@ A Windows desktop application for customizing the RSI Launcher UI. Built with Py
 ## Quick Start
 
 ### Option 1: Run Compiled Executable
-1. Download or build the `.exe`
+1. Download the `.exe`
 2. Double-click to launch (UAC will request admin privileges)
 3. Follow the 6-step wizard
 
