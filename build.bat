@@ -47,6 +47,12 @@ python -m PyInstaller ^
     --hidden-import=PyQt5 ^
     --hidden-import=PyQt5.QtWebEngineWidgets ^
     --hidden-import=PyQt5.QtCore ^
+    --hidden-import=flask ^
+    --hidden-import=flask_cors ^
+    --hidden-import=server ^
+    --hidden-import=launcher_detector ^
+    --hidden-import=color_replacer ^
+    --hidden-import=media_replacer ^
     launcher.py
 
 if %errorlevel% neq 0 (

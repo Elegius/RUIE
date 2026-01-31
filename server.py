@@ -1,6 +1,7 @@
 from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 import os
+import sys
 import json
 import shutil
 import subprocess
@@ -16,7 +17,19 @@ from launcher_detector import LauncherDetector
 from color_replacer import ColorReplacer
 from media_replacer import MediaReplacer
 
-app = Flask(__name__, static_folder='public', static_url_path='')
+# Determine the base path for resources
+def get_resource_path(relative_path):
+    """Get absolute path to resource, works for dev and for PyInstaller."""
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, relative_path)
+
+# Set up Flask with the correct static folder
+static_folder = get_resource_path('public')
+app = Flask(__name__, static_folder=static_folder, static_url_path='')
 CORS(app)
 
 # Configuration
@@ -1191,7 +1204,7 @@ def api_restore():
 @app.route('/<path:path>')
 def serve_static(path):
     """Serve static files from public directory."""
-    return send_from_directory('public', path)
+    return send_from_directory(static_folder, path)
 
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=5000, debug=False)

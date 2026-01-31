@@ -3,7 +3,24 @@
 ## Version 0.1 Alpha - Initial Release (January 2026)
 
 **Status**: 🔬 Alpha Release - Active Development  
-**Latest Update**: Complete UI/UX overhaul with music management & preview improvements (January 31, 2026)
+**Latest Update**: Fixed compiled EXE startup issue (February 1, 2026)
+
+### Critical Fixes (February 1, 2026)
+
+#### 🔴 Fixed: Compiled EXE Stuck at "Starting..."
+- **Problem**: App froze on startup when running as compiled `.exe`
+- **Root Cause**: Tried to launch Flask as subprocess using `python server.py` (not available in frozen mode)
+- **Solution**: Implemented dual-mode server startup:
+  - **Frozen Mode** (compiled EXE): Flask runs in a daemon thread within the same process
+  - **Source Mode** (development): Flask runs as subprocess for better debugging
+- **Technical Changes**:
+  - Added `is_frozen()` detection to identify compiled vs source execution
+  - Modified `launcher.py` to start Flask thread with `use_reloader=False` in frozen mode
+  - Updated `server.py` with `get_resource_path()` to locate bundled `public` folder
+  - Enhanced `build.bat` with hidden imports for Flask, server modules, and dependencies
+- **Result**: Compiled EXE now starts correctly and loads the UI
+
+### Previous Updates (January 31, 2026)
 
 ### Latest Changes (January 31, 2026 - Final Session)
 

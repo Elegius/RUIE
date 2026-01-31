@@ -15,6 +15,10 @@ from PyQt5.QtGui import QIcon
 APP_VERSION = "0.1 Alpha"
 APP_NAME = "RUIE"
 
+def is_frozen():
+    """Check if running as compiled executable."""
+    return getattr(sys, 'frozen', False)
+
 def is_admin():
     """Check if running with admin privileges."""
     try:
@@ -44,6 +48,7 @@ class LauncherApp(QMainWindow):
         super().__init__()
         self.port = port
         self.server_process = None
+        self.server_thread = None
         
         self.setWindowTitle(f'{APP_NAME} v{APP_VERSION}')
         self.setGeometry(100, 100, 1280, 820)
@@ -68,55 +73,78 @@ class LauncherApp(QMainWindow):
         self.check_and_load_ui()
     
     def start_server(self):
-        """Start the Flask server as a subprocess."""
+        """Start the Flask server as a subprocess or thread."""
         try:
             project_root = str(Path(__file__).parent)
             
             print(f'[App] Starting Flask server...')
             
-            # On Windows, hide the subprocess window
-            startupinfo = None
-            if sys.platform == 'win32':
-                startupinfo = subprocess.STARTUPINFO()
-                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-                startupinfo.wShowWindow = subprocess.SW_HIDE
-            
-            self.server_process = subprocess.Popen(
-                ['python', 'server.py'],
-                cwd=project_root,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                startupinfo=startupinfo
-            )
-            print(f'[App] Server process started with PID: {self.server_process.pid}')
-            
-            # Start threads to read server output
-            import threading
-            def read_output():
-                try:
-                    while True:
-                        line = self.server_process.stdout.readline()
-                        if not line:
-                            break
-                        print(f'[Server] {line.rstrip()}')
-                except:
-                    pass
-            
-            def read_errors():
-                try:
-                    while True:
-                        line = self.server_process.stderr.readline()
-                        if not line:
-                            break
-                        print(f'[Server Error] {line.rstrip()}')
-                except:
-                    pass
-            
-            output_thread = threading.Thread(target=read_output, daemon=True)
-            error_thread = threading.Thread(target=read_errors, daemon=True)
-            output_thread.start()
-            error_thread.start()
+            if is_frozen():
+                # Running as compiled EXE - start Flask in a thread
+                print('[App] Running in frozen mode - starting server as thread')
+                
+                def run_flask():
+                    try:
+                        # Change to the correct directory for frozen app
+                        if hasattr(sys, '_MEIPASS'):
+                            os.chdir(sys._MEIPASS)
+                        
+                        # Import and run server
+                        import server
+                        server.app.run(host='127.0.0.1', port=self.port, debug=False, use_reloader=False)
+                    except Exception as e:
+                        print(f'[Server Error] {e}')
+                
+                self.server_thread = threading.Thread(target=run_flask, daemon=True)
+                self.server_thread.start()
+                print('[App] Server thread started')
+                
+            else:
+                # Running from source - start Flask as subprocess
+                print('[App] Running from source - starting server as subprocess')
+                
+                # On Windows, hide the subprocess window
+                startupinfo = None
+                if sys.platform == 'win32':
+                    startupinfo = subprocess.STARTUPINFO()
+                    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                    startupinfo.wShowWindow = subprocess.SW_HIDE
+                
+                self.server_process = subprocess.Popen(
+                    ['python', 'server.py'],
+                    cwd=project_root,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                    startupinfo=startupinfo
+                )
+                print(f'[App] Server process started with PID: {self.server_process.pid}')
+                
+                # Start threads to read server output
+                def read_output():
+                    try:
+                        while True:
+                            line = self.server_process.stdout.readline()
+                            if not line:
+                                break
+                            print(f'[Server] {line.rstrip()}')
+                    except:
+                        pass
+                
+                def read_errors():
+                    try:
+                        while True:
+                            line = self.server_process.stderr.readline()
+                            if not line:
+                                break
+                            print(f'[Server Error] {line.rstrip()}')
+                    except:
+                        pass
+                
+                output_thread = threading.Thread(target=read_output, daemon=True)
+                error_thread = threading.Thread(target=read_errors, daemon=True)
+                output_thread.start()
+                error_thread.start()
             
         except Exception as e:
             print(f'[App Error] Failed to start server: {e}')

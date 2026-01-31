@@ -74,6 +74,29 @@ RUIE/
 └── requirements.txt      # Python dependencies
 ```
 
+## Architecture
+
+### Dual-Mode Server Design
+The application uses an intelligent server startup mechanism:
+
+- **Development Mode** (running from source):
+  - Flask server launches as a separate subprocess
+  - Allows live reloading and debugging
+  - Output streams captured for logging
+
+- **Production Mode** (compiled EXE):
+  - Flask server runs in a daemon thread within the main process
+  - No external Python interpreter required
+  - Resources loaded from PyInstaller's `_MEIPASS` temp directory
+  - Reloader disabled to prevent threading conflicts
+
+### Resource Path Resolution
+The app automatically detects execution mode and resolves paths:
+- **Frozen**: Uses `sys._MEIPASS` for bundled resources
+- **Source**: Uses script directory for local files
+
+This ensures the `public` folder and all assets load correctly in both modes.
+
 ## Color Customization
 
 The app provides 6 professional color presets:
