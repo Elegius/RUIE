@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Theme Preview</title>
+  <style>
+    :root {
+      --preview-bg: #0a1d29;
+      --preview-surface: #112534;
+      --preview-primary: #54adf7;
+      --preview-accent: #6db9f8;
+      --preview-text: #e0e0e0;
+      --preview-muted: #9fb1bf;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: var(--preview-bg);
+      color: var(--preview-text);
+      padding: 18px;
+    }
+
+    .preview-shell {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(109, 185, 248, 0.4);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .preview-header {
+      padding: 14px 18px;
+      background: linear-gradient(135deg, var(--preview-primary), var(--preview-accent));
+      color: #051018;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .preview-header span {
+      font-size: 0.9rem;
+      font-weight: 600;
+      opacity: 0.8;
+    }
+
+    .preview-body {
+      padding: 16px 18px 22px;
+      background: var(--preview-surface);
+    }
+
+    .preview-title {
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+      font-weight: 600;
+    }
+
+    .preview-text {
+      color: var(--preview-muted);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin-bottom: 14px;
+    }
+
+    .preview-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    .preview-button {
+      border: none;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: var(--preview-primary);
+      color: #051018;
+    }
+
+    .secondary {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid var(--preview-accent);
+      color: var(--preview-text);
+    }
+
+    .preview-panels {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .panel {
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(84, 173, 247, 0.2);
+    }
+
+    .panel h4 {
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+      color: var(--preview-accent);
+    }
+
+    .progress {
+      height: 8px;
+      background: rgba(0, 0, 0, 0.5);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress span {
+      display: block;
+      height: 100%;
+      width: 68%;
+      background: var(--preview-primary);
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(109, 185, 248, 0.4);
+      margin-top: 8px;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--preview-accent);
+    }
+  </style>
+</head>
+<body>
+  <div class="preview-shell">
+    <div class="preview-header">
+      RSI Launcher Preview
+      <span>Theme Snapshot</span>
+    </div>
+    <div class="preview-body">
+      <div class="preview-title">Launch Status</div>
+      <div class="preview-text">Visual preview updates instantly as you adjust colors in the editor.</div>
+      <div class="preview-actions">
+        <button class="preview-button primary">Primary Action</button>
+        <button class="preview-button secondary">Secondary Action</button>
+      </div>
+      <div class="preview-panels">
+        <div class="panel">
+          <h4>Download Progress</h4>
+          <div class="progress"><span></span></div>
+          <div class="status-pill"><span class="dot"></span> Active</div>
+        </div>
+        <div class="panel">
+          <h4>Theme Highlights</h4>
+          <div class="preview-text">Accent, buttons, and cards adapt to your new palette.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    window.addEventListener('message', (event) => {
+      if (!event.data || event.data.type !== 'preview-colors') return;
+      const palette = event.data.palette || {};
+      const root = document.documentElement;
+
+      if (palette.primary) root.style.setProperty('--preview-primary', palette.primary);
+      if (palette.accent) root.style.setProperty('--preview-accent', palette.accent);
+      if (palette.background) root.style.setProperty('--preview-bg', palette.background);
+      if (palette.surface) root.style.setProperty('--preview-surface', palette.surface);
+      if (palette.text) root.style.setProperty('--preview-text', palette.text);
+      if (palette.muted) root.style.setProperty('--preview-muted', palette.muted);
+    });
+  </script>
+</body>
+</html>

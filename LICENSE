@@ -1,0 +1,126 @@
+GNU GENERAL PUBLIC LICENSE
+Version 3, 29 June 2007
+
+Copyright (C) 2026 RUIE Contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+---
+
+TERMS AND CONDITIONS
+
+0. Definitions
+
+"This License" refers to version 3 of the GNU General Public License.
+
+"Copyright" also means copyright-like laws that apply to other kinds of works.
+
+"The Program" refers to any copyrightable work licensed under this License.
+
+"You" refers to each licensee.
+
+"Legal entities" means the union of the acting entity and all other entities
+that control, are controlled by, or are under common control with that entity.
+
+"Licensee" is you, the person receiving this work.
+
+1. Source Code
+
+The "source code" for a work means the preferred form of the work for making
+modifications to it.
+
+2. Basic Permissions
+
+All rights granted under this License are granted for the term of copyright
+on the Program, and are irrevocable provided the stated conditions are met.
+This License explicitly affirms your unlimited permission to run the unmodified
+Program. The output from running a covered work is covered by this License
+only if the output, by its nature, constitutes a covered work.
+
+3. Copyleft / Derivative Works
+
+You may make, run and propagate covered works that you do not convey, without
+conditions, so long as your license otherwise remains in force. You may convey
+covered works to others for the sole purpose of having them make modifications
+exclusively for you, or provide you with facilities for running these works,
+provided that you comply with the terms of this License.
+
+All rights not expressly granted are reserved.
+
+4. Distribution
+
+When you distribute copies of the Program or derivative works, you must:
+- Give the recipients all the source code
+- Make clear what changes you made
+- Keep all notices of this License and any non-permissive terms
+- Keep intact all warranties and liability disclaimers
+
+5. Restrictions
+
+You are not allowed to:
+- Restrict the further rights of the recipient
+- Charge any fee beyond the cost of physically transferring the copy
+- Require acceptance of additional restrictions
+
+6. Patents
+
+Each contributor grants you a non-exclusive, worldwide, royalty-free patent
+license under their essential patent claims.
+
+7. Additional Terms
+
+"Additional permissions" are terms that supplement this License by making
+exceptions from one or more of its conditions. When you convey a copy of a
+covered work, you may at your option remove any additional permissions from
+that copy, or from any part of it.
+
+If you distribute copies of the covered work, whether gratis or for a fee, you
+must pass on the same freedoms that you received. You must make sure that they,
+too, receive or can get the source code.
+
+8. Termination
+
+If you violate this License, your rights are terminated. However, if you cease
+all violation of this License, then your license from a particular copyright
+holder is reinstated provisionally, unless and until the copyright holder
+explicitly and finally terminates your license.
+
+9. Acceptance Not Required
+
+You do not have to accept this License in order to receive or run a copy of the
+Program. However, nothing other than this License grants you permission to
+propagate or modify any covered work. These actions infringe copyright if you do
+not accept this License.
+
+Therefore, by modifying or propagating a covered work, you indicate your
+acceptance of this License to do so.
+
+10. Automatic Licensing of Downstream Recipients
+
+Each time you convey a covered work, the recipient automatically receives a
+license from the original licensors, to run, modify and propagate that work,
+subject to this License.
+
+11. Protection of Users' Legal Rights
+
+This License is intended to make sure that freedom to share and change all
+versions of a program--to make sure it remains free software for all its users.
+
+---
+
+TO THE EXTENT PERMITTED BY APPLICABLE LAW, THIS PROGRAM IS PROVIDED WITHOUT
+WARRANTY OF ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO
+THE WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+
+IN NO EVENT SHALL ANY COPYRIGHT HOLDER BE LIABLE FOR ANY DAMAGES.

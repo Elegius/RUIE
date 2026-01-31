@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RSI Launcher Preview</title>
+  <style>
+    /* Import actual launcher CSS variables structure */
+    :root {
+      /* Primary colors */
+      --sol-color-primary-1: #071a25;
+      --sol-color-primary-2: #0a1f2e;
+      --sol-color-primary-3: #0d2536;
+      --sol-color-primary-4: #102a3e;
+      --sol-color-primary-5: #133047;
+      --sol-color-primary-6: #16354f;
+      --sol-color-primary-7: #54adf7;
+      --sol-color-primary-8: #8fc7f9;
+      
+      /* Neutral colors */
+      --sol-color-neutral-1: #091219;
+      --sol-color-neutral-2: #334048;
+      --sol-color-neutral-3: #9fb1bf;
+      --sol-color-neutral-4: #edf2f5;
+      
+      /* Accent colors */
+      --sol-color-accent-1: #54adf7;
+      --sol-color-accent-2: #41a1f5;
+      --sol-color-accent-3: #6db9f8;
+      
+      /* Surfaces */
+      --sol-color-surface-0: var(--sol-color-primary-1);
+      --sol-color-surface-1: var(--sol-color-primary-2);
+      --sol-color-surface-2: var(--sol-color-primary-3);
+      --sol-color-surface-3: var(--sol-color-primary-4);
+      
+      /* Interactive */
+      --sol-color-interactive: var(--sol-color-accent-1);
+      --sol-color-interactive-hovered: var(--sol-color-accent-3);
+      --sol-color-interactive-pressed: var(--sol-color-accent-2);
+      
+      /* Foreground */
+      --sol-color-foreground: var(--sol-color-neutral-4);
+      --sol-color-foreground-weak: var(--sol-color-primary-8);
+      
+      /* Background */
+      --sol-color-background: var(--sol-color-primary-1);
+      
+      /* Status */
+      --sol-color-status-positive: #4caf50;
+      --sol-color-status-negative: #f44336;
+      --sol-color-status-notice: #ff9800;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Bai Jamjuree', 'Segoe UI', system-ui, sans-serif;
+      background: var(--sol-color-background);
+      color: var(--sol-color-foreground);
+      overflow: hidden;
+      height: 100vh;
+    }
+
+    .launcher-preview {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      position: relative;
+    }
+
+    /* Header */
+    .app-header {
+      background: var(--sol-color-surface-1);
+      padding: 8px 12px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+
+    .rsi-logo {
+      height: 32px;
+      width: auto;
+      max-width: 120px;
+      background: var(--sol-color-interactive);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--sol-color-neutral-1);
+      padding: 0 8px;
+    }
+
+    .rsi-logo img {
+      height: 28px;
+      width: auto;
+      object-fit: contain;
+    }
+
+    .header-nav {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .nav-button {
+      background: transparent;
+      border: none;
+      color: var(--sol-color-foreground-weak);
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+
+    .nav-button:hover {
+      background: var(--sol-color-surface-2);
+      color: var(--sol-color-foreground);
+    }
+
+    .nav-button.active {
+      background: var(--sol-color-surface-3);
+      color: var(--sol-color-interactive);
+      font-weight: 600;
+    }
+
+    /* Main content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Background video/image area */
+    .background-media {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 45%;
+      overflow: hidden;
+      z-index: 1;
+    }
+
+    .background-media::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 150px;
+      background: linear-gradient(to top, var(--sol-color-background), transparent);
+      z-index: 2;
+    }
+
+    .background-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.6;
+      filter: brightness(0.7);
+    }
+
+    /* Game content */
+    .game-content {
+      position: relative;
+      z-index: 5;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 24px 48px;
+    }
+
+    .game-logo {
+      width: 280px;
+      margin-bottom: 32px;
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.3s forwards;
+    }
+
+    .game-title {
+      font-size: 32px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--sol-color-foreground);
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.5s forwards;
+    }
+
+    .game-tabs {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.6s forwards;
+    }
+
+    .tab {
+      background: transparent;
+      border: none;
+      color: var(--sol-color-foreground-weak);
+      padding: 8px 0;
+      cursor: pointer;
+      font-size: 14px;
+      position: relative;
+      transition: color 0.2s;
+    }
+
+    .tab:hover {
+      color: var(--sol-color-interactive-hovered);
+    }
+
+    .tab.active {
+      color: var(--sol-color-interactive);
+    }
+
+    .tab.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--sol-color-interactive);
+    }
+
+    .actions-area {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 300px;
+      margin-top: 8px;
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.7s forwards;
+    }
+
+    .game-button {
+      background: var(--sol-color-interactive);
+      color: var(--sol-color-neutral-1);
+      border: none;
+      padding: 14px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.25s;
+      position: relative;
+      overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+    }
+
+    .game-button:hover {
+      background: var(--sol-color-interactive-hovered);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(84, 173, 247, 0.3);
+    }
+
+    .game-button:active {
+      background: var(--sol-color-interactive-pressed);
+      transform: translateY(0);
+    }
+
+    .game-button.secondary {
+      background: var(--sol-color-surface-2);
+      color: var(--sol-color-foreground);
+      border: 1px solid var(--sol-color-surface-3);
+    }
+
+    .game-button.secondary:hover {
+      background: var(--sol-color-surface-3);
+    }
+
+    /* Cards area */
+    .cards-container {
+      position: absolute;
+      right: 0;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 16px;
+      padding: 24px;
+      max-width: 60%;
+      overflow-x: auto;
+      z-index: 5;
+    }
+
+    .game-card {
+      background: var(--sol-color-surface-0);
+      border: 1px solid var(--sol-color-surface-2);
+      border-radius: 8px;
+      min-width: 220px;
+      padding: 0;
+      cursor: pointer;
+      transition: all 0.3s;
+      overflow: hidden;
+      clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+      opacity: 0;
+      animation: fadeInRight 0.4s forwards;
+    }
+
+    .game-card:nth-child(1) { animation-delay: 0.8s; }
+    .game-card:nth-child(2) { animation-delay: 0.9s; }
+    .game-card:nth-child(3) { animation-delay: 1s; }
+
+    .game-card:hover {
+      border-color: var(--sol-color-interactive);
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-image {
+      width: 100%;
+      height: 260px;
+      object-fit: cover;
+      background: var(--sol-color-surface-2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--sol-color-foreground-weak);
+      font-size: 12px;
+    }
+
+    .card-content {
+      padding: 16px;
+    }
+
+    .card-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--sol-color-foreground);
+    }
+
+    .card-subtitle {
+      font-size: 12px;
+      color: var(--sol-color-foreground-weak);
+    }
+
+    .status-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: var(--sol-color-surface-2);
+      margin-top: 8px;
+    }
+
+    .status-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--sol-color-status-positive);
+    }
+
+    .status-dot.warning {
+      background: var(--sol-color-status-notice);
+    }
+
+    /* Progress bar */
+    .progress-bar-container {
+      margin-top: 16px;
+      opacity: 0;
+      animation: fadeInUp 0.5s 0.9s forwards;
+    }
+
+    .progress-label {
+      font-size: 12px;
+      color: var(--sol-color-foreground-weak);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: var(--sol-color-surface-2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 65%;
+      background: var(--sol-color-status-positive);
+      border-radius: 999px;
+      transition: width 0.3s;
+    }
+
+    /* Animations */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes fadeInRight {
+      from {
+        opacity: 0;
+        transform: translateX(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 10px;
+      height: 10px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--sol-color-surface-1);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--sol-color-surface-3);
+      border-radius: 5px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--sol-color-interactive);
+    }
+  </style>
+</head>
+<body>
+  <div class="launcher-preview">
+    <!-- Header -->
+    <div class="app-header">
+      <div class="rsi-logo" id="preview-logo" style="display: none; align-items: center; justify-content: center; padding: 0 8px;">
+        <img src="/assets/logos/sc-game-logo-small.svg" alt="Star Citizen" data-asset-path="assets/logos/sc-game-logo-small.svg" style="height: 28px; width: auto;" />
+      </div>
+      <nav class="header-nav">
+        <button class="nav-button">Library</button>
+        <button class="nav-button active">Games</button>
+        <button class="nav-button">Community</button>
+        <button class="nav-button">Settings</button>
+      </nav>
+    </div>
+
+    <!-- Main content -->
+    <div class="main-content">
+      <!-- Background media -->
+      <div class="background-media">
+        <div class="background-image" id="preview-background" data-asset-path="assets/images/sc_bg_fallback.jpg" data-asset-type="background" style="display: none; background-image: url('/assets/images/sc_bg_fallback.jpg'); background-size: cover; background-position: center; align-items: center; justify-content: center; font-size: 14px; color: var(--sol-color-foreground-weak);">
+          <span id="background-placeholder" style="display: none;">Background Video/Image</span>
+        </div>
+      </div>
+
+      <!-- Game content -->
+      <div class="game-content">
+        <div class="game-logo" style="display: none; height: 100px; border-radius: 4px; align-items: center; justify-content: flex-start; padding: 0 12px; margin-bottom: 16px;">
+          <img src="/assets/logos/sc-game-logo-wide.svg" alt="Star Citizen" data-asset-path="assets/logos/sc-game-logo-wide.svg" style="height: 80px; width: auto;" />
+        </div>
+        
+        <h1 class="game-title">Star Citizen</h1>
+        
+        <div class="game-tabs">
+          <button class="tab active">Overview</button>
+          <button class="tab">Updates</button>
+          <button class="tab">Community</button>
+          <button class="tab">Support</button>
+        </div>
+
+        <div class="actions-area">
+          <button class="game-button">Launch Game</button>
+          <button class="game-button secondary">Verify Files</button>
+          
+          <div class="progress-bar-container">
+            <div class="progress-label">
+              <span>Installation Progress</span>
+              <span>65%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+    </div>
+  </div>
+
+  <script>
+    // Listen for color and media updates from parent
+    window.addEventListener('message', (event) => {
+      if (!event.data) return;
+      
+      if (event.data.type === 'preview-colors') {
+        const colors = event.data.colors || {};
+        const root = document.documentElement;
+
+        // Map the editor's color mappings to the preview CSS variables
+        Object.keys(colors).forEach(varName => {
+          const value = colors[varName];
+          if (value) {
+            root.style.setProperty(varName, value);
+          }
+        });
+      }
+      
+      if (event.data.type === 'preview-media') {
+        const media = event.data.media || {};
+
+        // Apply asset path replacements
+        Object.keys(media).forEach((assetPath) => {
+          const value = media[assetPath];
+          if (!value) return;
+
+          const normalizedPath = assetPath.replace(/\\/g, '/');
+          const nodes = document.querySelectorAll(`[data-asset-path="${normalizedPath}"]`);
+          if (!nodes.length) return;
+
+          nodes.forEach((node) => {
+            if (node.tagName === 'IMG') {
+              node.src = value;
+            } else if (node.dataset.assetType === 'background') {
+              node.style.backgroundImage = `url('${value}')`;
+              const placeholderEl = document.getElementById('background-placeholder');
+              if (placeholderEl) placeholderEl.style.display = 'none';
+            }
+          });
+        });
+        
+      }
+    });
+
+    // Optional: Send a ready message to parent
+    window.parent.postMessage({ type: 'preview-ready' }, '*');
+  </script>
+</body>
+</html>
