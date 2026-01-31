@@ -216,8 +216,6 @@ Theme files (`.theme.json`) are portable and can be shared via Discord, Reddit, 
 ## Documentation
 
 - [QUICKSTART.md](QUICKSTART.md)
-- [PYTHON_MIGRATION.md](PYTHON_MIGRATION.md)
-- [MIGRATION_COMPLETE.md](MIGRATION_COMPLETE.md)
 - [CHANGELOG.md](CHANGELOG.md)
 
 ## License
