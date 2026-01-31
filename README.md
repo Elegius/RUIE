@@ -515,7 +515,6 @@ build.bat
 ## 📖 Documentation
 
 - 📘 [QUICKSTART.md](QUICKSTART.md) - Quick reference guide
-- 📗 [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md) - Complete project overview
 - 📙 [CHANGELOG.md](CHANGELOG.md) - Version history & updates
 - 📕 [LICENSE](LICENSE) - GPL v3.0 license details
 
