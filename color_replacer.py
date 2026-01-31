@@ -50,14 +50,31 @@ class ColorReplacer:
     @staticmethod
     def apply_colors(extracted_dir, color_mappings):
         """Apply color replacements to all relevant files."""
-        success_count = 0
-        
-        # Find all JSON/CSS/JS files
-        for root, dirs, files in os.walk(extracted_dir):
-            for file in files:
-                if file.endswith('.json') or file.endswith('.css') or file.endswith('.js'):
-                    file_path = os.path.join(root, file)
-                    if ColorReplacer.replace_in_file(file_path, color_mappings):
-                        success_count += 1
-        
-        return success_count
+        try:
+            success_count = 0
+            
+            if not os.path.exists(extracted_dir):
+                print(f"Error: extracted_dir doesn't exist: {extracted_dir}")
+                return 0
+            
+            print(f"Scanning for files in: {extracted_dir}")
+            
+            # Find all JSON/CSS/JS files
+            for root, dirs, files in os.walk(extracted_dir):
+                for file in files:
+                    if file.endswith(('.json', '.css', '.js')):
+                        file_path = os.path.join(root, file)
+                        try:
+                            if ColorReplacer.replace_in_file(file_path, color_mappings):
+                                success_count += 1
+                                print(f"Modified: {file_path}")
+                        except Exception as e:
+                            print(f"Error processing {file_path}: {e}")
+            
+            print(f"Total files modified: {success_count}")
+            return success_count
+        except Exception as e:
+            print(f"Exception in apply_colors: {e}")
+            import traceback
+            traceback.print_exc()
+            return 0

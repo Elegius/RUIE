@@ -134,10 +134,22 @@ class ThemeManager:
     
     def apply_colors(self, color_mappings):
         """Apply color replacements."""
-        if not self.extracted_dir or not os.path.exists(self.extracted_dir):
+        try:
+            if not self.extracted_dir or not os.path.exists(self.extracted_dir):
+                print(f"Error: extracted_dir not set or doesn't exist: {self.extracted_dir}")
+                return 0
+            
+            print(f"Applying colors to: {self.extracted_dir}")
+            print(f"Color mappings count: {len(color_mappings)}")
+            
+            result = ColorReplacer.apply_colors(self.extracted_dir, color_mappings)
+            print(f"Color replacement result: {result} files modified")
+            return result
+        except Exception as e:
+            print(f"Exception in apply_colors: {e}")
+            import traceback
+            traceback.print_exc()
             return 0
-        
-        return ColorReplacer.apply_colors(self.extracted_dir, color_mappings)
     
     def apply_media(self, media_mappings):
         """Apply media replacements."""
@@ -732,15 +744,24 @@ def api_status():
 @app.route('/api/apply-colors', methods=['POST'])
 def api_apply_colors():
     """Apply color replacements."""
-    data = request.json
-    color_mappings = data.get('colors', {})
-    
-    count = theme_manager.apply_colors(color_mappings)
-    
-    return jsonify({
-        'success': True,
-        'filesModified': count
-    })
+    try:
+        data = request.json
+        color_mappings = data.get('colors', {})
+        
+        if not color_mappings:
+            return jsonify({'success': False, 'error': 'No color mappings provided'}), 400
+        
+        count = theme_manager.apply_colors(color_mappings)
+        
+        return jsonify({
+            'success': True,
+            'filesModified': count
+        })
+    except Exception as e:
+        print(f"Error in apply_colors: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/apply-media', methods=['POST'])
 def api_apply_media():

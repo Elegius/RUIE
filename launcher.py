@@ -5,11 +5,24 @@ import time
 import socket
 import ctypes
 import threading
+import logging
 from pathlib import Path
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, QTimer
 from PyQt5.QtGui import QIcon
+
+# Set up logging
+log_file = os.path.join(os.path.expanduser('~'), 'Documents', 'RUIE-debug.log')
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.FileHandler(log_file, mode='w'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Version info
 APP_VERSION = "0.1 Alpha"
@@ -25,23 +38,24 @@ def is_admin():
         # Try using kernel32 instead of shell
         return ctypes.windll.kernel32.GetFileAttributesW('C:\\Program Files') != -1
     except Exception as e:
+        logger.error(f"Error checking admin status: {e}")
         return False
 
 def request_admin():
     """Request admin privileges if not already elevated."""
     is_admin_now = is_admin()
     if not is_admin_now:
-        print("[App] Requesting administrator privileges...")
+        logger.info("Requesting administrator privileges...")
         try:
             # Re-run this script with admin privileges
             script = sys.argv[0]
             ctypes.windll.shell.ShellExecuteW(None, "runas", script, "", None, 0)
             sys.exit(0)
         except Exception as e:
-            print(f"[App] Could not request elevation: {e}")
-            print("[App] Running without admin privileges - some features may not work")
+            logger.warning(f"Could not request elevation: {e}")
+            logger.warning("Running without admin privileges - some features may not work")
     else:
-        print("[App] ✓ Running with admin privileges ✓")
+        logger.info("✓ Running with admin privileges ✓")
 
 class LauncherApp(QMainWindow):
     def __init__(self, port=5000):
@@ -77,31 +91,33 @@ class LauncherApp(QMainWindow):
         try:
             project_root = str(Path(__file__).parent)
             
-            print(f'[App] Starting Flask server...')
+            logger.info('Starting Flask server...')
             
             if is_frozen():
                 # Running as compiled EXE - start Flask in a thread
-                print('[App] Running in frozen mode - starting server as thread')
+                logger.info('Running in frozen mode - starting server as thread')
                 
                 def run_flask():
                     try:
                         # Change to the correct directory for frozen app
                         if hasattr(sys, '_MEIPASS'):
                             os.chdir(sys._MEIPASS)
+                            logger.info(f'Working directory set to: {sys._MEIPASS}')
                         
                         # Import and run server
                         import server
-                        server.app.run(host='127.0.0.1', port=self.port, debug=False, use_reloader=False)
+                        logger.info('Server module imported successfully')
+                        server.app.run(host='127.0.0.1', port=self.port, debug=False, use_reloader=False, threaded=True)
                     except Exception as e:
-                        print(f'[Server Error] {e}')
+                        logger.error(f'Server error: {e}', exc_info=True)
                 
                 self.server_thread = threading.Thread(target=run_flask, daemon=True)
                 self.server_thread.start()
-                print('[App] Server thread started')
+                logger.info('Server thread started')
                 
             else:
                 # Running from source - start Flask as subprocess
-                print('[App] Running from source - starting server as subprocess')
+                logger.info('Running from source - starting server as subprocess')
                 
                 # On Windows, hide the subprocess window
                 startupinfo = None
@@ -118,7 +134,7 @@ class LauncherApp(QMainWindow):
                     universal_newlines=True,
                     startupinfo=startupinfo
                 )
-                print(f'[App] Server process started with PID: {self.server_process.pid}')
+                logger.info(f'Server process started with PID: {self.server_process.pid}')
                 
                 # Start threads to read server output
                 def read_output():
@@ -127,7 +143,7 @@ class LauncherApp(QMainWindow):
                             line = self.server_process.stdout.readline()
                             if not line:
                                 break
-                            print(f'[Server] {line.rstrip()}')
+                            logger.info(f'[Server] {line.rstrip()}')
                     except:
                         pass
                 
@@ -137,7 +153,7 @@ class LauncherApp(QMainWindow):
                             line = self.server_process.stderr.readline()
                             if not line:
                                 break
-                            print(f'[Server Error] {line.rstrip()}')
+                            logger.error(f'[Server Error] {line.rstrip()}')
                     except:
                         pass
                 
@@ -147,7 +163,7 @@ class LauncherApp(QMainWindow):
                 error_thread.start()
             
         except Exception as e:
-            print(f'[App Error] Failed to start server: {e}')
+            logger.error(f'Failed to start server: {e}', exc_info=True)
             self.show_error(f'Failed to start server: {e}')
     
     def is_server_ready(self):
@@ -164,16 +180,16 @@ class LauncherApp(QMainWindow):
     def check_and_load_ui(self):
         """Check if server is ready and load UI."""
         if self.is_server_ready():
-            print(f'[App] Server is ready on port {self.port}')
+            logger.info(f'Server is ready on port {self.port}')
             self.load_ui()
         else:
-            print(f'[App] Waiting for server to be ready...')
+            logger.debug('Waiting for server to be ready...')
             QTimer.singleShot(1000, self.check_and_load_ui)
     
     def load_ui(self):
         """Load the web UI."""
         url = QUrl(f'http://127.0.0.1:{self.port}')
-        print(f'[App] Loading UI from {url.toString()}')
+        logger.info(f'Loading UI from {url.toString()}')
         self.browser.load(url)
     
     def show_error(self, message):
@@ -186,15 +202,15 @@ class LauncherApp(QMainWindow):
     
     def closeEvent(self, event):
         """Handle application close."""
-        print('[App] Shutting down...')
+        logger.info('Shutting down...')
         if self.server_process:
             try:
-                print('[App] Terminating server process...')
+                logger.info('Terminating server process...')
                 self.server_process.terminate()
                 self.server_process.wait(timeout=5)
-                print('[App] Server terminated')
+                logger.info('Server terminated')
             except Exception as e:
-                print(f'[App] Error terminating server: {e}')
+                logger.error(f'Error terminating server: {e}')
                 try:
                     self.server_process.kill()
                 except:
@@ -204,6 +220,9 @@ class LauncherApp(QMainWindow):
 def main():
     # Request admin privileges if not already elevated
     request_admin()
+    
+    logger.info(f'Starting {APP_NAME} v{APP_VERSION}')
+    logger.info(f'Log file: {log_file}')
     
     app = QApplication(sys.argv)
     
