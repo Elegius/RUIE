@@ -540,18 +540,6 @@ body::before {
     box-shadow: 0 0 12px rgba(0, 212, 255, 0.2);
 }
 
-.existing-extract {
-    margin-top: 12px;
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.existing-extract label {
-    color: #b0bac0;
-}
-
 .media-asset-picker {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -869,8 +857,8 @@ body::before {
 .color-section-content {
     padding: 12px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px;
     max-height: 400px;
     overflow-y: auto;
 }
