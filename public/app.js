@@ -2901,6 +2901,94 @@ function showStatus(elementId, message, type) {
     element.className = `status show ${type}`;
 }
 
+/**
+ * Check for available updates
+ */
+async function checkForUpdates() {
+    try {
+        const response = await fetch('/api/check-updates');
+        if (!response.ok) throw new Error('Failed to check updates');
+        
+        const data = await response.json();
+        
+        if (data.success && data.has_update) {
+            // Show update notification
+            showUpdateNotification(data.latest_version, data.release_url, data.release_notes);
+        }
+    } catch (error) {
+        console.log('[Updates] Could not check for updates:', error.message);
+        // Silently fail - don't interrupt user experience
+    }
+}
+
+/**
+ * Display update notification banner
+ */
+function showUpdateNotification(latestVersion, releaseUrl, releaseNotes) {
+    // Create or update the notification banner
+    let banner = document.getElementById('update-notification');
+    
+    if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'update-notification';
+        banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10000;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        `;
+        document.body.insertBefore(banner, document.body.firstChild);
+        
+        // Adjust body margin to accommodate banner
+        document.body.style.marginTop = '60px';
+    }
+    
+    banner.innerHTML = `
+        <div style="flex: 1;">
+            <strong>Update Available!</strong> RUIE v${latestVersion} is now available.
+            ${releaseNotes ? `<div style="font-size: 0.9em; margin-top: 4px; opacity: 0.9;">${releaseNotes}</div>` : ''}
+        </div>
+        <div style="display: flex; gap: 12px; margin-left: 16px;">
+            <a href="${releaseUrl}" target="_blank" style="
+                background: white;
+                color: #667eea;
+                padding: 8px 16px;
+                border-radius: 4px;
+                text-decoration: none;
+                font-weight: 600;
+                font-size: 0.9em;
+                cursor: pointer;
+                border: none;
+                transition: all 0.2s;
+            " onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                Download
+            </a>
+            <button onclick="document.getElementById('update-notification').style.display='none'; document.body.style.marginTop='0';" style="
+                background: rgba(255,255,255,0.2);
+                color: white;
+                border: 1px solid rgba(255,255,255,0.4);
+                padding: 8px 16px;
+                border-radius: 4px;
+                cursor: pointer;
+                font-weight: 500;
+                font-size: 0.9em;
+                transition: all 0.2s;
+            " onmouseover="this.style.background='rgba(255,255,255,0.3)'" onmouseout="this.style.background='rgba(255,255,255,0.2)'">
+                Dismiss
+            </button>
+        </div>
+    `;
+}
+
 window.addEventListener('load', async () => {
     // Initialize DOM cache first for performance
     DOM.init();
@@ -2917,4 +3005,11 @@ window.addEventListener('load', async () => {
     await loadExtractedASARList();
 
     detectLauncher({ autoInit: false, silentFailure: true });
-});
+    
+    // Check for updates asynchronously (non-blocking)
+    setTimeout(() => {
+        checkForUpdates();
+    }, 2000); // Wait 2 seconds after app loads
+    
+    // Check for updates every 24 hours
+    setInterval(checkForUpdates, 24 * 60 * 60 * 1000);

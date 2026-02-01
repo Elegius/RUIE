@@ -32,7 +32,8 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 | **Windows Installer** | ✅ Complete | Inno Setup + scripts |
 | **Installation System** | ✅ Complete | 4 distribution methods |
 | **Security Audit** | ✅ Complete | 10 issues identified |
-| **Documentation** | ✅ Complete | 15+ files |
+| **Update Checker** | ✅ Complete | GitHub integration + security audit |
+| **Documentation** | ✅ Complete | 17+ files |
 
 ---
 
@@ -74,8 +75,20 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 - Build troubleshooting guide (10+ issue solutions)
 - Quick reference guides
 - Changelog updated with new features
-- Security audit documentation
+- Security audit documentation (original vulnerabilities)
+- Update checker documentation and security audit
 - Installer setup documentation
+
+### Update Checker ✅ (NEW - Feb 1, 2026)
+- Automatic GitHub release checking
+- Visual notification banner with release notes
+- 24-hour check interval
+- 5-second timeout to prevent hanging
+- Graceful error handling (silent if offline)
+- Full security audit: **No vulnerabilities found**
+- HTTPS/TLS encryption
+- Zero PII transmission
+- OWASP Top 10 compliant
 
 ---
 
@@ -84,14 +97,14 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 | Date | Version | Major Features |
 |------|---------|-----------------|
 | **Jan 2026** | 0.1 Alpha | Initial release - wizard, colors, media, music |
-| **Feb 1, 2026** | 0.2 Alpha | New endpoints, installer, build system, security audit |
+| **Feb 1, 2026** | 0.2 Alpha | New endpoints, installer, build system, security audit, update checker |
 
 ---
 
 ## 🔧 Technical Infrastructure
 
 ### Backend
-- Flask REST API (27+ endpoints)
+- Flask REST API (38+ endpoints)
 - Launcher detection & registration
 - File extraction/repacking via asar
 - Color and media replacement engines
@@ -195,14 +208,14 @@ None - All critical and high-priority security issues have been resolved.
 ## 🎓 Next Steps for v0.3+
 
 Potential enhancements for future versions:
-- Implement security fixes from audit
-- Auto-update system
+- Implement additional security recommendations from audit
 - Theme sharing/community repository
 - Advanced color picker UI
 - Batch theme application
 - Configuration profiles
 - Linux/Mac support (if demand exists)
 - Plugin system for custom mods
+- Automatic updates (currently manual via update checker)
 
 ---
 

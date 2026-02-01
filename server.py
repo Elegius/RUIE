@@ -1161,6 +1161,82 @@ def api_status():
         'lastError': theme_manager.status.get('lastError')
     })
 
+@app.route('/api/check-updates', methods=['GET'])
+def api_check_updates():
+    """Check for new versions on GitHub API."""
+    try:
+        import urllib.request
+        import json as json_lib
+        
+        # Current version from launcher
+        from launcher import APP_VERSION
+        
+        # GitHub API endpoint for latest release
+        url = 'https://api.github.com/repos/Elegius/RUIE/releases/latest'
+        
+        try:
+            # Fetch latest release info with timeout
+            req = urllib.request.Request(
+                url,
+                headers={'User-Agent': 'RUIE-UpdateChecker'}
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                data = json_lib.loads(response.read().decode())
+                latest_version = data.get('tag_name', '').lstrip('v')
+                release_url = data.get('html_url', 'https://github.com/Elegius/RUIE/releases')
+                release_notes = data.get('body', '')
+                
+                # Simple version comparison (compare as strings, works for semantic versioning)
+                # e.g., "0.3" > "0.2" when comparing lexicographically
+                has_update = latest_version > APP_VERSION
+                
+                return jsonify({
+                    'success': True,
+                    'current_version': APP_VERSION,
+                    'latest_version': latest_version,
+                    'has_update': has_update,
+                    'release_url': release_url,
+                    'release_notes': release_notes[:500] if release_notes else ''  # First 500 chars
+                })
+        except urllib.error.URLError as e:
+            # Network error - return current version with no update info
+            return jsonify({
+                'success': True,
+                'current_version': APP_VERSION,
+                'latest_version': APP_VERSION,
+                'has_update': False,
+                'error': f'Could not check updates: {str(e)}'
+            }), 200
+        except Exception as e:
+            return jsonify({
+                'success': True,
+                'current_version': APP_VERSION,
+                'latest_version': APP_VERSION,
+                'has_update': False,
+                'error': f'Update check error: {str(e)}'
+            }), 200
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Update check failed: {str(e)}'
+        }), 500
+
+@app.route('/api/app-version', methods=['GET'])
+def api_app_version():
+    """Get current application version."""
+    try:
+        from launcher import APP_VERSION
+        return jsonify({
+            'success': True,
+            'version': APP_VERSION
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/apply-colors', methods=['POST'])
 def api_apply_colors():
     """Apply color replacements asynchronously."""

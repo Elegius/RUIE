@@ -81,7 +81,11 @@ echo Step 3: Building Inno Setup installer...
 echo.
 
 REM Run Inno Setup compiler
-"%INNO_SETUP_PATH%" /cc RUIE_Installer.iss
+REM Note: ISCC.exe compiler options:
+REM   No flags needed - script filename is the only argument
+REM   /O directory - output directory (we use OutputDir in .iss instead)
+REM   /Q - quiet mode (suppresses dialogs)
+"%INNO_SETUP_PATH%" RUIE_Installer.iss
 
 if errorlevel 1 (
     echo.

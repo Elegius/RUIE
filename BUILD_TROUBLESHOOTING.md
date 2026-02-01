@@ -300,17 +300,60 @@ Source: "dist\RUIE\*"; DestDir: "{app}"; ...          ; Line 2 - includes exe ag
 If `build_installer.bat` fails, try running Inno Setup compiler directly for better error messages:
 
 ```batch
-REM Open the Inno Setup IDE
+REM Compile the installer script
 "C:\Program Files (x86)\Inno Setup 6\iscc.exe" RUIE_Installer.iss
 
-REM Or compile silently (see output in console)
-"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /Qp RUIE_Installer.iss
-
-REM With verbose output
-"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /Qp /V RUIE_Installer.iss
+REM With quiet mode (less verbose output)
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /Q RUIE_Installer.iss
 ```
 
 The error messages will be more detailed and show exactly which line is problematic.
+
+#### **Common ISCC.exe Flags**
+| Flag | Purpose |
+|------|---------|
+| (none) | Normal compilation with console output |
+| `/Q` | Quiet mode - minimal output |
+| `/O directory` | Specify output directory |
+| `/Qp` | Quiet + progress bar |
+
+**Note:** The `/cc` flag mentioned in older documentation is **not valid** for ISCC.exe and should not be used.
+
+---
+
+### Issue 6.6: Unknown Option "/cc"
+
+**Error Message:**
+```
+Unknown option: /cc
+Error: Inno Setup compilation failed
+```
+
+**Cause:**
+The `/cc` flag is not a valid option for ISCC.exe compiler. This flag was incorrectly specified in older build scripts.
+
+**Solution:**
+Use the correct syntax without the `/cc` flag:
+
+```batch
+REM WRONG (old script)
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /cc RUIE_Installer.iss
+
+REM CORRECT (current script)
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" RUIE_Installer.iss
+```
+
+**Why it was wrong:**
+- The Inno Setup ISCC.exe compiler doesn't have a `/cc` option
+- Valid flags are: `/Q`, `/O`, `/Qp`, `/Qr`, `/Qi`
+- The script file should be the only required argument
+- The `.iss` script file specifies compilation settings (OutputDir, etc.)
+
+**How to fix:**
+- If using `build_installer.bat`: It's already fixed (updated Feb 1, 2026)
+- If using manual command: Just omit the `/cc` flag
+
+The latest version of `build_installer.bat` has been corrected to use the proper syntax.
 
 ---
 

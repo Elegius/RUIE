@@ -219,8 +219,18 @@ This is normal and required for the app to function properly.
 
 ## Updates and Maintenance
 
-### Checking for Updates
-Visit the GitHub repository to check for new versions:
+### Automatic Update Checking
+RUIE automatically checks for updates on GitHub when the application starts and periodically (every 24 hours). If a new version is available, you'll see a notification banner at the top of the application with a download link.
+
+**Update Check Details:**
+- GitHub API is queried for the latest release
+- Checks occur automatically in the background
+- No network requests are blocked by the system
+- Update notification includes release notes
+- Can be dismissed without affecting functionality
+
+### Manual Update Checking
+Visit the GitHub repository to check for new versions manually:
 https://github.com/Elegius/RUIE
 
 ### Updating from Previous Version

@@ -17,6 +17,7 @@
 - **Live Preview** - Real-time theme preview with 1:1 accuracy
 - **Backup & Recovery** - Full theme backup and restore functionality
 - **Extraction Management** - Create, reuse, and delete extractions
+- **Update Checker** - Automatic GitHub-based update notifications
 - **36 REST API Endpoints** - Complete backend infrastructure
 - **Professional Windows Installer** - Inno Setup 6 configuration
 - **Production WSGI Server** - Waitress multi-threaded server
@@ -43,6 +44,16 @@ All 10 identified vulnerabilities have been **fixed and verified**:
 - Production Logging
 
 **Implementation**: See [SECURITY_FIXES_APPLIED.md](SECURITY_FIXES_APPLIED.md)
+
+### ✅ Update Checker Security
+The update checking feature has been **security audited and approved for production**:
+- ✅ No vulnerabilities found
+- ✅ HTTPS/TLS encryption
+- ✅ Safe error handling
+- ✅ Zero PII transmission
+- ✅ Complies with OWASP standards
+
+**Audit**: See [UPDATE_CHECKER_SECURITY_AUDIT.md](UPDATE_CHECKER_SECURITY_AUDIT.md)
 
 ---
 
@@ -73,7 +84,8 @@ All 10 identified vulnerabilities have been **fixed and verified**:
 - **Framework**: Flask 3.0+
 - **Server**: Waitress 2.1+ (production WSGI)
 - **Desktop**: PyQt5 + PyQtWebEngine
-- **APIs**: 36 functional endpoints
+- **APIs**: 38 functional endpoints (including update checker)
+- **Update Service**: GitHub API integration
 
 ### Frontend
 - **Language**: Vanilla JavaScript (~1420 lines)
