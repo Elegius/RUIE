@@ -27,8 +27,7 @@ SetupIconFile=icon.ico
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "{cm:CreateDesktopIconTask}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
-Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIconTask}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; OnlyBelowVersion: 6.1
+Name: "desktopicon"; Description: "Create a desktop icon"; GroupDescription: "Additional Icons"; Flags: unchecked
 Name: "associatefiles"; Description: "Associate with theme preset files (.json)"; GroupDescription: "File Association"
 
 [Files]
@@ -41,12 +40,11 @@ Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{group}\RUIE"; Filename: "{app}\RUIE.exe"; IconFilename: "{app}\icon.ico"; Comment: "RSI Launcher UI Editor"
-Name: "{group}\{cm:UninstallProgram,RUIE}"; Filename: "{uninstallexe}"
+Name: "{group}\Uninstall RUIE"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\RUIE"; Filename: "{app}\RUIE.exe"; IconFilename: "{app}\icon.ico"; Tasks: desktopicon; Comment: "RSI Launcher UI Editor"
-Name: "{userappdata}\Microsoft\Internet Explorer\Quick Launch\RUIE"; Filename: "{app}\RUIE.exe"; IconFilename: "{app}\icon.ico"; Tasks: quicklaunchicon
 
 [Run]
-Filename: "{app}\RUIE.exe"; Description: "{cm:LaunchProgram,RUIE}"; Flags: nowait postinstall skipifsilent runascurrentuser
+Filename: "{app}\RUIE.exe"; Description: "Launch RUIE"; Flags: nowait postinstall skipifsilent runascurrentuser
 
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
