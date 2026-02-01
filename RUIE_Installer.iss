@@ -49,32 +49,3 @@ Filename: "{app}\RUIE.exe"; Description: "Launch RUIE"; Flags: nowait postinstal
 [UninstallDelete]
 Type: dirifempty; Name: "{app}"
 Type: dirifempty; Name: "{autopf}"
-
-[Code]
-procedure CurStepChanged(CurStep: TSetupStep);
-var
-  Msg: String;
-begin
-  if CurStep = ssFinished then
-  begin
-    Msg := 'RUIE has been successfully installed!' + #13#10 + #13#10 +
-           'Important: This application requires Administrator privileges to modify the RSI Launcher.' + #13#10 + #13#10 +
-           'When you run RUIE, you may receive a UAC (User Account Control) prompt. Click "Yes" to proceed.' + #13#10 + #13#10 +
-           'For more information, visit: https://github.com/Elegius/RUIE';
-    MsgBox(Msg, mbInformation, MB_OK);
-  end;
-end;
-
-procedure InitializeWizard();
-var
-  Msg: String;
-begin
-  Msg := 'RUIE - RSI Launcher UI Editor' + #13#10 + #13#10 +
-         'Version: 0.2 Alpha' + #13#10 + #13#10 +
-         'This installer will set up RUIE on your system.' + #13#10 + #13#10 +
-         'IMPORTANT DISCLAIMER:' + #13#10 +
-         '- RUIE is a fan-made project NOT affiliated with Cloud Imperium Games' + #13#10 +
-         '- Star Citizen and RSI Launcher are trademarks of Cloud Imperium Games' + #13#10 +
-         '- Use this tool at your own risk and in accordance with CIG Terms of Service';
-  MsgBox(Msg, mbInformation, MB_OK);
-end;
