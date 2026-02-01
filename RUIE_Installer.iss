@@ -22,8 +22,6 @@ ArchitecturesInstallIn64BitMode=x64
 ArchitecturesAllowed=x64
 PrivilegesRequired=admin
 SetupIconFile=icon.ico
-WizardImageFile=compiler:wizmodernimage-is.bmp
-WizardSmallImageFile=compiler:wizmodernsmallimage-is.bmp
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
