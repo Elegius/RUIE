@@ -1,21 +1,61 @@
-# RUIE Build System - Setup Complete ✅
+# RUIE Build System - Production Ready ✅
 
-## Recent Updates (Feb 1, 2026)
+## Build v2.1 - Enhanced Startup Progress UI (Feb 1, 2026)
+
+### 🎯 Major Enhancement: Visual Startup Feedback
+**Problem**: Portable EXE shows static "Starting" text, appears frozen  
+**Solution**: Implemented professional progress UI with progress bar, percentage, status messages, and 3-step indicators  
+**Status**: ✅ Successfully implemented and compiled
+
+#### What's New:
+- **Progress Bar**: Live percentage display (0-100%) with smooth animations
+- **Status Messages**: Real-time feedback ("Loading dependencies...", "Starting server...", "Initializing UI...")
+- **Step Indicators**: 3-step progress flow with animated spinners for active steps, checkmarks for complete
+- **Timeout Protection**: 35-second timeout with friendly error message if server fails to start
+- **Design**: Professional sci-fi aesthetic matching RUIE branding
+
+#### Files Updated:
+- `launcher.py` - Added `show_loading_screen()` with embedded HTML/CSS/JS, `update_loading_progress()` method, enhanced `check_and_load_ui()` with attempt tracking
+- Documentation created: `STARTUP_PROGRESS_UI.md`
+
+---
+
+## Build v2 - Critical Hidden Imports Fix (Feb 1, 2026)
+
+### 🎯 Major Issue Fixed: Flask Server Dependency Bundle
+**Problem**: Portable EXE hung on "Starting" screen indefinitely  
+**Root Cause**: PyInstaller missing Flask's production WSGI server (`waitress` module)  
+**Debug Evidence**: `RUIE-debug.log` showed `ModuleNotFoundError: No module named 'waitress'`  
+**Solution**: Enhanced RUIE.spec with 16 hidden imports + matching build.bat flags  
+**Status**: ✅ Successfully rebuilt - executable now starts Flask server properly
 
 ### Build & Deployment Issues Fixed:
-1. ✅ **Inno Setup `/cc` flag error** - Removed invalid flag from build script
-2. ✅ **Wizard image file errors** - Removed missing image file references from `.iss` script
-3. ✅ **Missing custom message errors** - Removed localized message constants that weren't defined
-4. ✅ **Pascal code compilation errors** - Removed problematic Pascal procedure that was causing identifier errors
-5. ✅ **Portable exe double-launch issue** - Fixed admin privilege re-execution logic in frozen mode
+1. ✅ **Hidden Imports Bundle** - Added waitress, werkzeug, jinja2, markupsafe, itsdangerous, click, PyQt5 modules
+2. ✅ **Inno Setup `/cc` flag error** - Removed invalid flag from build script
+3. ✅ **Wizard image file errors** - Removed missing image file references
+4. ✅ **Missing custom message errors** - Removed localized message constants
+5. ✅ **Pascal code compilation errors** - Removed problematic Pascal procedure
+6. ✅ **Portable exe double-launch issue** - Fixed admin privilege re-execution logic
 
-### Files Updated:
-- `build_installer.bat` - Fixed Inno Setup compiler flags
-- `RUIE_Installer.iss` - Cleaned up configuration (removed problematic wizard images, messages, and code)
-- `launcher.py` - Fixed admin privilege request to prevent double-launch in compiled mode
-- `BUILD_TROUBLESHOOTING.md` - Added Issues 6.6, 6.7, & 6.8 documentation
-- `UPDATE_CHECKER_SECURITY_AUDIT.md` - Comprehensive security review
-- `DOUBLE_LAUNCH_FIX.md` - Documentation of the exe double-launch fix
+### Files Updated (Build v2.1 + v2):
+**Build v2.1 (Startup Progress UI)**:
+- `launcher.py` - Enhanced loading screen (150+ lines HTML/CSS/JS, `update_loading_progress()` method)
+- `STARTUP_PROGRESS_UI.md` - Complete documentation of new startup feature
+
+**Build v2 (Hidden Imports)**:
+- `RUIE.spec` - Enhanced hidden imports (3 → 16 modules including waitress, werkzeug, jinja2, etc.)
+- `build.bat` - Added 17 `--hidden-import` flags matching RUIE.spec dependencies
+- `build_installer.bat` - Now properly inherits all hidden imports from updated spec
+- `STATUS.md` - Updated with build v2 hidden imports fix
+- `PROJECT_SUMMARY.md` - Updated build status with dependency bundle info
+- `BUILD_STATUS.md` - Comprehensive build v2 documentation
+
+### Previous Build Updates:
+- `RUIE_Installer.iss` - Cleaned up configuration
+- `launcher.py` - Fixed admin privilege request
+- `BUILD_TROUBLESHOOTING.md` - Comprehensive build guide
+- `UPDATE_CHECKER_SECURITY_AUDIT.md` - Security review
+- `DOUBLE_LAUNCH_FIX.md` - Double-launch fix documentation
 
 ---
 

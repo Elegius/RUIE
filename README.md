@@ -36,9 +36,10 @@
 - ✅ **6-Step Wizard** - Streamlined workflow
 - 👁️ **Live Preview** - Real-time theme updates
 - ✅ **17 Professional Presets** - Ready-to-use manufacturer themes
-- 🔧 **127+ Color Variables** - Complete customization
+- 🔧 **54 Color Variables** - 27 colors + RGB variants for complete customization
 - 🖼️ **Media Replacement** - Images & videos
 - 🎵 **Music Playlist** - Custom background audio
+- ⚡ **Progress Feedback** - Visual startup progress with percentage and status messages
 
 </td>
 <td width="50%">
@@ -50,6 +51,7 @@
 - 🛡️ **Admin Support** - Automatic UAC elevation
 - 📊 **Debug Logging** - Built-in troubleshooting
 - 📱 **Responsive Design** - All screen sizes
+- 🚀 **Smart Startup** - Real-time progress bar, status updates, timeout protection
 
 </td>
 </tr>
@@ -151,7 +153,7 @@ graph LR
 |------|-------------|----------|
 | **1️⃣ Initialize** | Locate RSI Launcher | Auto-detection, manual path selection |
 | **2️⃣ Extract** | Unpack app.asar | Progress tracking, reuse existing extractions |
-| **3️⃣ Colors** | Customize theme colors | 7 presets, 127+ variables, live preview |
+| **3️⃣ Colors** | Customize theme colors | 17 presets, 54 variables, live preview |
 | **4️⃣ Media** | Replace visual assets | Grid picker, images & videos |
 | **5️⃣ Music** | Manage audio tracks | Add/remove/reorder playlist |
 | **6️⃣ Finalize** | Deploy your theme | Test temporarily or install permanently |

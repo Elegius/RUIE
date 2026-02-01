@@ -62,6 +62,46 @@ For a professional installer experience:
 
 ## Portable EXE Deployment Issues
 
+### Issue 0.5: "Failed to load Python DLL" Error
+
+**Symptoms:**
+```
+Failed to load Python DLL
+C:\...\python314.dll
+LoadLibrary: The specified module could not be found.
+```
+
+**Root Cause:**
+PyInstaller's `--onefile` flag with paths containing spaces causes DLL extraction failures, especially with Python 3.14.
+
+**Solution:**
+The current build uses **directory-based distribution** which avoids this issue:
+
+1. **Build creates**: `dist/RUIE/RUIE.exe` with `_internal/` folder
+2. **DLLs stay in**: `dist/RUIE/_internal/` (stable location)
+3. **No extraction**: DLLs are accessed directly, no temporary extraction
+
+**What Changed:**
+- Removed `--onefile` from build process
+- Distribute entire `dist/RUIE/` folder (not just the exe)
+- All users need to keep the RUIE folder structure intact
+
+**How to Use:**
+```bash
+# Extract the entire RUIE folder
+# Double-click dist/RUIE/RUIE.exe
+# Don't move RUIE.exe separately from the folder
+```
+
+**Why This Works:**
+- Avoids path extraction issues with spaces
+- More reliable with Python 3.14+
+- Better performance (no runtime extraction)
+
+See [DLL_LOADING_FIX.md](DLL_LOADING_FIX.md) for technical details.
+
+---
+
 ### Issue 0: Portable EXE Opens Twice or Gets Stuck
 
 **Symptoms:**

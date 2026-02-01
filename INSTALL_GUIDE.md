@@ -51,14 +51,23 @@ For portable use without installation.
 1. Download `RUIE.exe` from Releases
 2. Place in any folder
 3. Double-click `RUIE.exe`
-4. Wait 3-5 seconds for app to load
-5. If you want to use launcher theme modification features, right-click and select "Run as administrator" when prompted
+4. Watch the progress bar during startup (5-15 seconds)
+   - Progress bar shows real-time initialization status
+   - Status messages indicate what's being loaded
+   - Three animated step indicators show progress
+5. Main application opens when progress reaches 100%
+6. If you want to use launcher theme modification features, ensure admin privileges are granted when prompted
 
 **⚠️ Important - What You'll See:**
-- **First launch**: May show a UAC prompt asking "Do you want to allow this app to make changes to your device?"
+- **Progress Screen** (5-15 seconds):
+  - Progress bar with percentage display (0-100%)
+  - Status messages: "Loading dependencies...", "Starting server...", "Initializing UI..."
+  - Three-step indicators with animated spinners showing progress
+  - Do not close the window during this phase
+- **UAC Prompt**: May show Windows asking "Do you want to allow this app to make changes to your device?"
   - Click "Yes" if you want full theme modification features
   - Click "No" to run in read-only mode (can preview themes but not apply them)
-- **Subsequent launches**: Should load cleanly without prompts
+- **Subsequent launches**: Should load cleanly with faster initialization
 
 **Advantages:**
 - No installation required
@@ -73,9 +82,11 @@ For portable use without installation.
 - Needs admin privileges for theme application
 
 **Troubleshooting:**
-- If app doesn't open after double-click, wait a few seconds (Flask server takes time to start)
-- If you see "Address already in use" error, close any other RUIE instances
-- If themes won't apply, right-click exe → "Run as administrator"
+- **Progress bar stuck**: If progress bar doesn't move for more than 35 seconds, the server failed to start. Restart the application or check `RUIE-debug.log` for errors.
+- **"Address already in use" error**: Close any other RUIE instances running on port 5000
+- **Themes won't apply**: Ensure you clicked "Yes" when UAC prompted for admin privileges
+- **App doesn't open**: Wait 15 seconds - progress bar will show the server is still initializing
+- **See error dialog**: Check `RUIE-debug.log` in your Documents folder for technical details
 
 ---
 

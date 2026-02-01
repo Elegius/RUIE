@@ -1,5 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 # PyInstaller spec file for RUIE (RSI Launcher UI Editor)
+# NOTE: Uses directory-based distribution (not --onefile) to avoid DLL extraction issues
+# with paths containing spaces. Ensure the entire RUIE folder is kept together.
 
 block_cipher = None
 
@@ -16,6 +18,22 @@ a = Analysis(
         'flask',
         'flask_cors',
         'PyQt5',
+        'PyQt5.QtWebEngineWidgets',
+        'PyQt5.QtCore',
+        'PyQt5.QtGui',
+        'PyQt5.QtWidgets',
+        'PyQt5.QtWebEngineCore',
+        'PyQt5.QtWebChannel',
+        'server',
+        'launcher_detector',
+        'color_replacer',
+        'media_replacer',
+        'waitress',
+        'werkzeug',
+        'jinja2',
+        'markupsafe',
+        'itsdangerous',
+        'click',
     ],
     hookspath=[],
     hooksconfig={},

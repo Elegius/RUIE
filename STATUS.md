@@ -1,10 +1,11 @@
 # RUIE Status Report
 
 **Project**: RSI Launcher UI Editor (RUIE)  
-**Version**: 0.2 Alpha  
-**Last Updated**: February 1, 2026  
+**Version**: 0.2 Alpha Build v2.1  
+**Last Updated**: February 1, 2026 (Startup Progress UI)  
 **Status**: ✅ **PRODUCTION-READY - SAFE FOR DISTRIBUTION**  
-**Security**: ✅ **ALL 10 VULNERABILITIES FIXED**
+**Security**: ✅ **ALL 10 VULNERABILITIES FIXED**  
+**User Experience**: ✅ **ENHANCED STARTUP FEEDBACK & PROGRESS TRACKING**
 
 ---
 
@@ -34,19 +35,72 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 | **Security Audit** | ✅ Complete | 10 issues identified |
 | **Update Checker** | ✅ Complete | GitHub integration + security audit |
 | **Documentation** | ✅ Complete | 17+ files |
+| **Startup UI** | ✅ Complete | Progress bar, status messages, 3-step indicators |
 
 ---
 
 ## 🎯 Latest Updates (Feb 1, 2026)
 
-### 🔧 Build System Fixes ✅
-**All 5 cascade errors fixed - Build system now fully stable**
+### ✅ **ENHANCEMENT: Professional Startup Progress UI**
+**Issue Addressed: Portable app appears frozen on "Starting" screen with no feedback**
 
-1. **Inno Setup Compiler Flag Error** - Removed invalid `/cc` flag from `build_installer.bat`
-2. **Wizard Image References** - Removed `WizardImageFile`/`WizardSmallImageFile` from `RUIE_Installer.iss` (using built-in defaults)
-3. **Localization Message Constants** - Replaced undefined constants like `CreateDesktopIconTask` with plain English text
-4. **Pascal Code Compatibility** - Removed problematic Pascal Code section that referenced undefined identifiers like `ssFinished`
-5. **Portable EXE Double-Launch** - Fixed `launcher.py` admin privilege logic to detect frozen mode and prevent re-execution
+**Solution Implemented**:
+- **Progress Bar**: Live percentage display (0-100%) with smooth gradient animation
+- **Status Messages**: Real-time operation feedback ("Loading dependencies...", "Starting server...", "Initializing UI...")
+- **Step Indicators**: 3-step visual progression with animated spinners and checkmarks
+- **Timeout Protection**: 35-second timeout with user-friendly error message
+- **Professional Design**: Sci-fi aesthetic matching RUIE branding
+- **Embedded Solution**: All UI code embedded in launcher.py (no external files)
+
+**Implementation Details**:
+- **New Methods in launcher.py**:
+  - `show_loading_screen()` - Displays HTML/CSS/JS loading UI (150+ lines)
+  - `update_loading_progress()` - Python-to-JavaScript bridge for real-time updates
+  - Enhanced `check_and_load_ui()` - Tracks attempts, calculates progress, shows elapsed seconds
+  - Enhanced `start_server()` - Reports progress at key checkpoints (15%, 25%, 30%, 45%, 50%)
+
+**User Experience Flow**:
+```
+0-5s:   Progress bar animates 0% → 50% while server starts
+5-15s:  Progress continues 50% → 100% as UI loads
+Result: Professional animated feedback prevents perceived freezing
+```
+
+**Files Updated**: `launcher.py`, `STARTUP_PROGRESS_UI.md` (new)
+
+---
+
+### ✅ **CRITICAL FIX: Hidden Imports & Runtime Dependencies**
+**Root Cause Identified & Fixed: Missing Flask dependency bundle causing "Starting" hang**
+
+#### Problem: Portable EXE hung indefinitely on "Starting" screen
+- **Root Cause**: PyInstaller was not including Flask's production WSGI server (`waitress`) module
+- **Effect**: Flask server would fail to start silently, launcher.py would timeout waiting for port 5000
+- **Debug Evidence**: `RUIE-debug.log` showed `ModuleNotFoundError: No module named 'waitress'`
+
+#### Solution Implemented:
+1. **RUIE.spec** - Enhanced hidden imports from 3 to **16 modules**:
+   - Added: `waitress`, `werkzeug`, `jinja2`, `markupsafe`, `itsdangerous`, `click`
+   - Added: `PyQt5.QtGui`, `PyQt5.QtWidgets`, `PyQt5.QtWebEngineCore`, `PyQt5.QtWebChannel`
+   - Plus existing: `flask`, `flask_cors`, `server`, `launcher_detector`, `color_replacer`, `media_replacer`
+
+2. **build.bat** - Added 17 matching `--hidden-import` flags to PyInstaller command
+
+3. **build_installer.bat** - Automatically inherits all fixes from updated RUIE.spec
+
+#### Result:
+✅ **Both portable EXE and installer successfully rebuilt** (104.8 seconds)
+- `dist\RUIE\RUIE.exe` - Directory-based distribution with all dependencies
+- `dist\RUIE-0.2-Alpha-Installer.exe` - Full Windows installer with built-in exe
+
+### 🔧 Previous Build System Fixes ✅
+**All 5 cascade errors fixed - Build system fully stable**
+
+1. **Inno Setup Compiler Flag Error** - Removed invalid `/cc` flag
+2. **Wizard Image References** - Removed missing image file references
+3. **Localization Message Constants** - Replaced undefined constants
+4. **Pascal Code Compatibility** - Removed problematic Pascal section
+5. **Portable EXE Double-Launch** - Fixed admin privilege logic
 
 **Result**: Both installer and portable EXE now build and run cleanly without errors.
 

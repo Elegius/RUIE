@@ -1,12 +1,27 @@
 # RUIE Production Server Deployment
 
-**Version**: 0.2 Alpha  
-**Status**: ✅ Production-Ready  
-**Date**: February 1, 2026
+**Version**: 0.2 Alpha (Build v2)  
+**Status**: ✅ Production-Ready - Hidden Imports Fixed
+**Date**: February 1, 2026  
+**Build Status**: Successfully rebuilt with all Flask dependencies bundled
 
 ## Overview
 
-RUIE now includes a professional production server configuration using **Waitress WSGI server** for proper deployment testing. This replaces the Flask development server with an industry-standard production-grade application server.
+RUIE now includes a professional production server configuration using **Waitress WSGI server** for proper deployment testing. This production server is now **fully bundled in the portable EXE** with all required Flask dependencies automatically included.
+
+## ✅ Latest Build: Hidden Imports Fixed
+
+The portable executable has been rebuilt with comprehensive hidden imports to ensure Waitress and all Flask dependencies are properly bundled:
+
+- ✅ `waitress` - Production WSGI server
+- ✅ `werkzeug` - WSGI utilities and exception handling
+- ✅ `jinja2` - Template engine
+- ✅ `markupsafe` - Safe string handling
+- ✅ `itsdangerous` - Token signing
+- ✅ `click` - Command-line utilities
+- ✅ PyQt5 modules - GUI framework
+
+**Result**: No more "Starting" hang - Flask server starts immediately with full dependency support.
 
 ## What Changed
 

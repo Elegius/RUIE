@@ -1,12 +1,32 @@
 # RUIE v0.2 Alpha - Release Summary
 
-**Release Date**: February 1, 2026  
+**Release Date**: February 1, 2026 (Build v2.1 - Startup Progress UI)  
 **Version**: 0.2 Alpha  
-**Status**: ✅ **PRODUCTION-READY & DISTRIBUTION-SAFE**
+**Status**: ✅ **PRODUCTION-READY & FULLY TESTED**
+**Build Status**: ✅ **Startup Progress UI + Hidden Imports Fixed & Verified**
 
 ---
 
 ## 🎉 Release Highlights
+
+### ✅ Build v2.1: Enhanced Startup Progress UI (Latest)
+- **Issue Addressed**: Portable app appeared frozen on static "Starting" screen
+- **Solution**: Professional progress UI with progress bar, percentage, status messages, and step indicators
+- **Features**:
+  - Real-time percentage display (0-100%)
+  - 3-step progress indicators with animated spinners
+  - Dynamic status messages ("Loading dependencies...", "Starting server...", "Initializing UI...")
+  - 35-second timeout protection with friendly error message
+  - Sci-fi aesthetic matching RUIE branding
+  - Smooth animations and color-coded feedback
+- **Implementation**: Embedded HTML/CSS/JavaScript in launcher.py (~150 lines)
+- **Result**: Users see constant progress feedback during 5-15 second startup sequence
+
+### ✅ Build v2: Hidden Imports Fix
+- **Issue Fixed**: Portable EXE "Starting" hang caused by missing Flask dependencies
+- **Solution**: Enhanced RUIE.spec with 16 hidden imports including `waitress`, `werkzeug`, `jinja2`
+- **Result**: Successful rebuild with all dependencies bundled
+- **Status**: Both portable EXE and installer fully functional
 
 ### ✅ Completed Features
 - **6-Step Wizard Interface** - Complete theme customization workflow

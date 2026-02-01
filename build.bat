@@ -31,12 +31,12 @@ echo This may take a few minutes...
 echo.
 
 REM Build the exe with PyInstaller using python -m to avoid PATH issues
-REM --onefile: Creates a single executable
 REM --windowed: No console window
 REM --icon: Window and taskbar icon
 REM --add-data: Include public folder with all assets
+REM NOTE: Not using --onefile due to path spaces causing DLL loading issues
+REM The directory structure in dist/RUIE/ is more reliable for DLL extraction
 python -m PyInstaller ^
-    --onefile ^
     --windowed ^
     --icon="%cd%\icon.ico" ^
     --name="RUIE" ^
@@ -44,15 +44,26 @@ python -m PyInstaller ^
     --workpath="build" ^
     --specpath="build" ^
     --add-data "%cd%\public;public" ^
+    --add-data "%cd%\assets;assets" ^
     --hidden-import=PyQt5 ^
     --hidden-import=PyQt5.QtWebEngineWidgets ^
     --hidden-import=PyQt5.QtCore ^
+    --hidden-import=PyQt5.QtGui ^
+    --hidden-import=PyQt5.QtWidgets ^
+    --hidden-import=PyQt5.QtWebEngineCore ^
+    --hidden-import=PyQt5.QtWebChannel ^
     --hidden-import=flask ^
     --hidden-import=flask_cors ^
     --hidden-import=server ^
     --hidden-import=launcher_detector ^
     --hidden-import=color_replacer ^
     --hidden-import=media_replacer ^
+    --hidden-import=waitress ^
+    --hidden-import=werkzeug ^
+    --hidden-import=jinja2 ^
+    --hidden-import=markupsafe ^
+    --hidden-import=itsdangerous ^
+    --hidden-import=click ^
     launcher.py
 
 if %errorlevel% neq 0 (
@@ -65,10 +76,11 @@ if %errorlevel% neq 0 (
 echo.
 echo ===== Build Complete =====
 echo.
-echo Created: dist\RUIE.exe
+echo Created: dist\RUIE\RUIE.exe
 echo.
-echo You can now:
-echo   1. Double-click the exe to run the app
-echo   2. Move it anywhere you want
+echo To use the portable app:
+echo   1. Copy the entire dist\RUIE folder to your desired location
+echo   2. Double-click RUIE.exe to run
+echo   3. Or move just the RUIE folder to a USB drive for portability
 echo.
 pause

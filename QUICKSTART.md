@@ -31,9 +31,16 @@
 2. Place anywhere (USB drive, Desktop, etc.)
 3. Double-click `RUIE.exe`
 4. Click "Yes" when UAC prompts for admin
-5. App launches immediately, no installation needed
+5. Watch the progress bar as the app initializes (5-15 seconds)
+6. Main application launches when progress reaches 100%
 
 **Best for:** Quick testing, USB portability, temporary use
+
+**What to Expect**:
+- **5-15 second startup** with visual progress feedback
+- **Progress bar** showing real-time initialization status
+- **Status messages** indicating what's being loaded ("Loading dependencies...", "Starting server...", etc.)
+- **Animated indicators** for each startup step
 
 ---
 

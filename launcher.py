@@ -121,8 +121,8 @@ class LauncherApp(QMainWindow):
         self.browser = QWebEngineView()
         self.setCentralWidget(self.browser)
         
-        # Show loading message
-        self.browser.setHtml('<html><body style="background:#0a1d29; color:#e0e0e0; font-family:Segoe UI; display:flex; align-items:center; justify-content:center;"><h2>Starting...</h2></body></html>')
+        # Show enhanced loading screen with progress
+        self.show_loading_screen()
         
         # Start server
         self.start_server()
@@ -130,16 +130,225 @@ class LauncherApp(QMainWindow):
         # Load UI after server is ready
         self.check_and_load_ui()
     
+    def show_loading_screen(self):
+        """Display an enhanced loading screen with progress bar and status messages."""
+        loading_html = '''
+        <html>
+        <head>
+            <style>
+                body {
+                    margin: 0;
+                    padding: 0;
+                    background: linear-gradient(135deg, #0a0e27 0%, #0a1d29 100%);
+                    color: #c0c8d0;
+                    font-family: 'Segoe UI', Arial, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 100vh;
+                    overflow: hidden;
+                }
+                
+                .loading-container {
+                    text-align: center;
+                    padding: 40px;
+                    max-width: 500px;
+                }
+                
+                .loading-logo {
+                    font-size: 3em;
+                    margin-bottom: 20px;
+                    font-weight: bold;
+                    color: #00d4ff;
+                    text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+                    letter-spacing: 2px;
+                }
+                
+                .loading-title {
+                    font-size: 1.8em;
+                    margin-bottom: 30px;
+                    color: #00d4ff;
+                    font-weight: 600;
+                    letter-spacing: 1px;
+                }
+                
+                .progress-section {
+                    margin-top: 40px;
+                }
+                
+                .progress-bar-container {
+                    width: 100%;
+                    height: 8px;
+                    background: rgba(0, 212, 255, 0.1);
+                    border-radius: 4px;
+                    overflow: hidden;
+                    margin-bottom: 15px;
+                    border: 1px solid rgba(0, 212, 255, 0.3);
+                }
+                
+                .progress-bar {
+                    height: 100%;
+                    background: linear-gradient(90deg, #00d4ff, #00a8cc);
+                    border-radius: 4px;
+                    width: 0%;
+                    transition: width 0.3s ease;
+                    box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+                }
+                
+                .progress-text {
+                    font-size: 0.9em;
+                    color: #a0b0c0;
+                    margin-bottom: 8px;
+                    min-height: 20px;
+                }
+                
+                .progress-percentage {
+                    font-size: 1.2em;
+                    color: #00d4ff;
+                    font-weight: bold;
+                    margin-top: 10px;
+                }
+                
+                .status-item {
+                    font-size: 0.85em;
+                    color: #7a8a9a;
+                    margin-top: 4px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                }
+                
+                .status-item.active {
+                    color: #00d4ff;
+                    font-weight: 500;
+                }
+                
+                .status-icon {
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                }
+                
+                .status-icon.complete {
+                    color: #64c864;
+                }
+                
+                .spinner {
+                    display: inline-block;
+                    width: 12px;
+                    height: 12px;
+                    border: 2px solid rgba(0, 212, 255, 0.3);
+                    border-top-color: #00d4ff;
+                    border-radius: 50%;
+                    animation: spin 0.8s linear infinite;
+                }
+                
+                @keyframes spin {
+                    to { transform: rotate(360deg); }
+                }
+                
+                .footer-text {
+                    font-size: 0.8em;
+                    color: #5a6a7a;
+                    margin-top: 30px;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="loading-container">
+                <div class="loading-logo">◇ RUIE ◇</div>
+                <div class="loading-title">RSI Launcher UI Editor</div>
+                
+                <div class="progress-section">
+                    <div class="progress-text" id="statusText">Initializing...</div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar" id="progressBar"></div>
+                    </div>
+                    <div class="progress-percentage" id="percentage">0%</div>
+                    
+                    <div style="margin-top: 25px; text-align: left;">
+                        <div class="status-item" id="status1">
+                            <span class="status-icon"><span class="spinner" id="spinner1"></span></span>
+                            <span>Loading Python dependencies...</span>
+                        </div>
+                        <div class="status-item" id="status2">
+                            <span class="status-icon">○</span>
+                            <span>Starting Flask server...</span>
+                        </div>
+                        <div class="status-item" id="status3">
+                            <span class="status-icon">○</span>
+                            <span>Initializing user interface...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="footer-text">
+                    v0.2 Alpha • Do not close this window
+                </div>
+            </div>
+            
+            <script>
+                let currentProgress = 0;
+                let currentStep = 1;
+                
+                function updateProgress(progress, step, statusText) {
+                    currentProgress = Math.min(progress, 99);
+                    currentStep = step || currentStep;
+                    
+                    // Update progress bar
+                    document.getElementById('progressBar').style.width = currentProgress + '%';
+                    document.getElementById('percentage').textContent = currentProgress + '%';
+                    document.getElementById('statusText').textContent = statusText || 'Loading...';
+                    
+                    // Update status indicators
+                    for (let i = 1; i <= 3; i++) {
+                        const statusEl = document.getElementById('status' + i);
+                        const iconEl = statusEl.querySelector('.status-icon');
+                        
+                        if (i < currentStep) {
+                            // Complete
+                            statusEl.classList.remove('active');
+                            iconEl.innerHTML = '✓';
+                            iconEl.classList.add('complete');
+                        } else if (i === currentStep) {
+                            // Active
+                            statusEl.classList.add('active');
+                            iconEl.innerHTML = '<span class="spinner"></span>';
+                            iconEl.classList.remove('complete');
+                        } else {
+                            // Pending
+                            statusEl.classList.remove('active');
+                            iconEl.innerHTML = '○';
+                            iconEl.classList.remove('complete');
+                        }
+                    }
+                }
+                
+                // Expose function to Python/WebEngine
+                window.updateProgress = updateProgress;
+                
+                // Initial state
+                updateProgress(5, 1, 'Loading Python dependencies...');
+            </script>
+        </body>
+        </html>
+        '''
+        self.browser.setHtml(loading_html)
+        logger.info("Enhanced loading screen displayed")
+    
     def start_server(self):
         """Start the production Flask server as a subprocess or thread."""
         try:
             project_root = str(Path(__file__).parent)
             
             logger.info('Starting production server (Waitress WSGI)...')
+            self.update_loading_progress(15, 1, 'Starting Flask server...')
             
             if is_frozen():
                 # Running as compiled EXE - start Flask in a thread with Waitress
                 logger.info('Running in frozen mode (production) - starting server as thread')
+                self.update_loading_progress(25, 1, 'Importing server modules...')
                 
                 def run_flask():
                     try:
@@ -153,6 +362,7 @@ class LauncherApp(QMainWindow):
                         from waitress import serve
                         logger.info('Server module imported successfully - using Waitress WSGI')
                         logger.info(f'Production server starting on port {self.port}')
+                        self.update_loading_progress(50, 2, 'Initializing Flask application...')
                         serve(server.app, host='127.0.0.1', port=self.port, threads=4)
                     except Exception as e:
                         logger.error(f'Server error: {e}', exc_info=True)
@@ -160,10 +370,12 @@ class LauncherApp(QMainWindow):
                 self.server_thread = threading.Thread(target=run_flask, daemon=True)
                 self.server_thread.start()
                 logger.info('Server thread started')
+                self.update_loading_progress(45, 2, 'Server starting...')
                 
             else:
                 # Running from source - start Flask as subprocess with Waitress
                 logger.info('Running from source - starting production server as subprocess (Waitress WSGI)')
+                self.update_loading_progress(30, 1, 'Starting Flask subprocess...')
                 
                 # On Windows, hide the subprocess window
                 startupinfo = None
@@ -181,6 +393,7 @@ class LauncherApp(QMainWindow):
                     startupinfo=startupinfo
                 )
                 logger.info(f'Server process started with PID: {self.server_process.pid}')
+                self.update_loading_progress(45, 2, 'Flask server initializing...')
                 
                 # Start threads to read server output
                 def read_output():
@@ -212,6 +425,20 @@ class LauncherApp(QMainWindow):
             logger.error(f'Failed to start server: {e}', exc_info=True)
             self.show_error(f'Failed to start server: {e}')
     
+    
+    def update_loading_progress(self, progress, step, status_text):
+        """Update the loading screen progress bar and status."""
+        try:
+            # Use JavaScript to update progress UI
+            script = f'''
+            if (typeof window.updateProgress === 'function') {{
+                window.updateProgress({progress}, {step}, "{status_text}");
+            }}
+            '''
+            self.browser.page().runJavaScript(script)
+        except Exception as e:
+            logger.debug(f'Could not update progress UI: {e}')
+    
     def is_server_ready(self):
         """Check if the server is responding on the configured port."""
         try:
@@ -224,12 +451,34 @@ class LauncherApp(QMainWindow):
             return False
     
     def check_and_load_ui(self):
-        """Check if server is ready and load UI."""
+        """Check if server is ready and load UI with progress feedback."""
+        if not hasattr(self, 'check_attempts'):
+            self.check_attempts = 0
+        
         if self.is_server_ready():
             logger.info(f'Server is ready on port {self.port}')
+            self.update_loading_progress(75, 3, 'Loading user interface...')
+            time.sleep(0.5)  # Brief pause for visual feedback
             self.load_ui()
         else:
-            logger.debug('Waiting for server to be ready...')
+            self.check_attempts += 1
+            
+            # Update progress based on attempts (0-35 attempts = 0-70% progress)
+            progress = min(45 + (self.check_attempts * 0.7), 70)
+            self.update_loading_progress(progress, 2, f'Waiting for server... ({self.check_attempts}s)')
+            
+            logger.debug(f'Waiting for server to be ready... ({self.check_attempts}s)')
+            
+            # Timeout after 35 seconds
+            if self.check_attempts > 35:
+                logger.error('Server did not respond within 35 seconds')
+                self.show_error(
+                    'Server Startup Timeout<br><br>'
+                    'The application server failed to start within the expected time.<br><br>'
+                    'Try: Restart the application or check the RUIE-debug.log file for errors.'
+                )
+                return
+            
             QTimer.singleShot(1000, self.check_and_load_ui)
     
     def load_ui(self):

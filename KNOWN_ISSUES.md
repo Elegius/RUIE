@@ -2,6 +2,19 @@
 
 ## Recently Fixed ✅
 
+### Startup Progress UI - Enhanced User Experience (February 1, 2026)
+- **Issue**: Portable app appeared frozen on static "Starting" screen with no feedback
+- **Status**: ✅ **FIXED**
+- **Details**:
+  - Implemented professional progress UI with progress bar and percentage display
+  - Added real-time status messages ("Loading dependencies...", "Starting server...")
+  - Created 3-step progress indicators with animated spinners
+  - Added 35-second timeout protection with user-friendly error message
+  - Embedded entire UI in launcher.py (~150 lines of HTML/CSS/JavaScript)
+  - Progress updates at key checkpoints: 15%, 25%, 30%, 45%, 50%, then 50-100% during server wait
+- **Result**: Users now see constant visual feedback during 5-15 second startup sequence
+- **Reference**: See [STARTUP_PROGRESS_UI.md](STARTUP_PROGRESS_UI.md) for complete documentation
+
 ### Delete Button Functionality (February 1, 2026)
 - **Issue**: Delete buttons for backups and extracted ASARs didn't respond to clicks
 - **Status**: ✅ **FIXED**
