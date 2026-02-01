@@ -348,7 +348,7 @@ Choose from **17 carefully crafted manufacturer-themed color schemes**:
 
 ### 🎛️ Manual Customization
 
-- **127+ CSS Variables** - Fine-tune every color in the launcher
+- **54 CSS Variables** - Fine-tune every color (27 colors + RGB variants)
 - **Organized Sections** - Primary, Neutral, Accent, Status, Interactive, and more
 - **Dual Input Modes** - Hex codes or RGB sliders
 - **Live Preview** - See changes instantly

@@ -63,13 +63,28 @@ def request_admin():
     - Install themes to Star Citizen launcher
     
     Windows will display a User Account Control (UAC) prompt.
+    
+    NOTE: In frozen (compiled) mode, the UAC prompt happens at startup,
+    so this function will detect admin status and skip re-execution.
     """
     is_admin_now = is_admin()
     if not is_admin_now:
         logger.info("Requesting administrator privileges...")
         logger.info("Reason: Need access to modify Star Citizen launcher files in Program Files")
+        
+        # In frozen/compiled mode, we can't reliably re-execute, so just warn the user
+        if is_frozen():
+            logger.warning("Running without admin privileges - some features may not work")
+            logger.warning("Note: Right-click the exe and choose 'Run as administrator' for full functionality")
+            from PyQt5.QtWidgets import QMessageBox
+            msg = ("Administrator Privileges Recommended\n\n"
+                   "RUIE works best when run as Administrator to modify Star Citizen launcher files.\n\n"
+                   "Tip: Right-click RUIE.exe and select 'Run as administrator'")
+            logger.info(msg)
+            return  # Don't try to re-execute in frozen mode
+        
         try:
-            # Re-run this script with admin privileges using ShellExecute
+            # Re-run this script with admin privileges using ShellExecute (source mode only)
             script = sys.argv[0]
             ctypes.windll.shell.ShellExecuteW(
                 None, 
@@ -83,12 +98,6 @@ def request_admin():
         except Exception as e:
             logger.warning(f"Could not request elevation: {e}")
             logger.warning("Running without admin privileges - some features may not work")
-            # Show error in UI
-            from PyQt5.QtWidgets import QMessageBox
-            msg = ("Administrator Privileges Required\n\n"
-                   "RUIE needs admin access to modify Star Citizen launcher files.\n\n"
-                   "Please run RUIE as Administrator.")
-            logger.error(msg)
     else:
         logger.info("✓ Running with admin privileges ✓")
 

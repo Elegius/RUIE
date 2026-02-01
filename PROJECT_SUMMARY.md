@@ -21,7 +21,7 @@ A comprehensive Windows desktop application for customizing the RSI Launcher UI 
 ### Core Purpose
 - Auto-detect and initialize RSI Launcher
 - Extract and backup RSI Launcher's `app.asar` file
-- Modify 127+ CSS color variables with 17 professional presets
+- Modify 54 CSS color variables (27 colors + RGB variants) with 17 professional presets
 - Replace media assets (images, videos, audio)
 - Manage music playlist with HTML5 player
 - Preview changes with live 1:1 accurate launcher representation
@@ -185,7 +185,7 @@ Core Application
    - Automatic backup before modification
 
 3. **Color Customization**
-   - 127+ CSS custom properties (`--sol-color-*`)
+   - 54 CSS custom properties (`--sol-color-*`) - 27 unique colors + RGB variants
    - **6 Professional Presets + C3RB**:
      - RSI Original (default official colors)
      - Midnight Purple (sophisticated purple theme)
@@ -197,7 +197,7 @@ Core Application
    - **Collapsible sections**: Primary (default), Neutral, Accent, Interactive, Status, etc.
    - Color wheel + RGB sliders
    - Live preview panel (1:1 accurate launcher representation)
-   - Real-time updates for all 127+ CSS variables
+   - Real-time updates for all 54 CSS variables
    - **Color persistence**: Colors retained across navigation steps
 
 4. **Media Replacement** - Updated

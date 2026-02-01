@@ -44,25 +44,38 @@ For portable use without installation.
 
 **Requirements:**
 - Windows 10 or 11
-- Administrator privileges (to modify launcher)
+- Administrator privileges (optional - to modify launcher)
 - ~300MB disk space
 
 **Steps:**
 1. Download `RUIE.exe` from Releases
 2. Place in any folder
 3. Double-click `RUIE.exe`
-4. Click "Yes" when UAC prompts for admin privileges
-5. App launches and runs from current location
+4. Wait 3-5 seconds for app to load
+5. If you want to use launcher theme modification features, right-click and select "Run as administrator" when prompted
+
+**⚠️ Important - What You'll See:**
+- **First launch**: May show a UAC prompt asking "Do you want to allow this app to make changes to your device?"
+  - Click "Yes" if you want full theme modification features
+  - Click "No" to run in read-only mode (can preview themes but not apply them)
+- **Subsequent launches**: Should load cleanly without prompts
 
 **Advantages:**
 - No installation required
 - Can run from USB drive
 - Easy to remove (just delete the exe)
+- Fast to test themes
 
 **Disadvantages:**
 - No Start Menu shortcuts
 - No easy uninstall option
 - Must keep .exe and dependencies together
+- Needs admin privileges for theme application
+
+**Troubleshooting:**
+- If app doesn't open after double-click, wait a few seconds (Flask server takes time to start)
+- If you see "Address already in use" error, close any other RUIE instances
+- If themes won't apply, right-click exe → "Run as administrator"
 
 ---
 

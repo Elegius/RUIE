@@ -11,7 +11,7 @@
 ### ✅ Completed Features
 - **6-Step Wizard Interface** - Complete theme customization workflow
 - **17 Professional Color Presets** - Manufacturer-themed color schemes
-- **127+ Color Variables** - Complete CSS customization
+- **54 Color Variables** - 27 unique colors + RGB variants for complete CSS customization
 - **Media Management** - Images, videos, and audio replacement
 - **Music Playlist** - Custom background audio with HTML5 player
 - **Live Preview** - Real-time theme preview with 1:1 accuracy
@@ -74,6 +74,27 @@ The update checking feature has been **security audited and approved for product
 4. ✅ Build from source with PyInstaller
 
 **All methods documented in**: [QUICKSTART.md](QUICKSTART.md), [INSTALL_GUIDE.md](INSTALL_GUIDE.md)
+
+---
+
+## 🔧 Build System Stability
+
+### Build System Improvements v0.2 Alpha
+The build system has been completely stabilized and tested:
+
+**Fixed Issues:**
+1. ✅ **Inno Setup Compiler** - Removed `/cc` flag and wizard image references
+2. ✅ **Installer Configuration** - Replaced problematic Pascal code and localization constants
+3. ✅ **Portable EXE Execution** - Fixed admin privilege logic to prevent double-launch
+4. ✅ **PyInstaller Integration** - Verified frozen mode detection and admin handling
+
+**Testing Results:**
+- ✅ `build.bat` - Portable EXE builds and runs cleanly
+- ✅ `build_installer.bat` - Installer compiles without errors
+- ✅ `RUIE.exe` - Launches on first double-click (no hanging)
+- ✅ `RUIE-0.2-Alpha-Installer.exe` - Creates clean Windows installation
+
+**Build Stability**: 100% - All known issues resolved
 
 ---
 

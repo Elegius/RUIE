@@ -60,6 +60,44 @@ For a professional installer experience:
 
 ---
 
+## Portable EXE Deployment Issues
+
+### Issue 0: Portable EXE Opens Twice or Gets Stuck
+
+**Symptoms:**
+- Double-clicking RUIE.exe opens it twice
+- App gets stuck on "Starting..." screen
+- Both instances compete for port 5000
+
+**Root Cause:**
+The admin privilege request code was trying to re-execute the exe, causing multiple instances.
+
+**Solution:**
+This has been fixed in the current version. When building the portable exe:
+
+1. **Clean build**:
+   ```bash
+   python -m PyInstaller RUIE.spec --clean
+   ```
+
+2. **Run the new exe**:
+   - Double-click `dist\RUIE\RUIE.exe`
+   - Should launch cleanly once
+   - Should load UI in a few seconds
+
+**What was fixed:**
+The admin privilege request now detects frozen (compiled) mode and skips re-execution, instead just showing a helpful message asking the user to "Run as administrator" if needed.
+
+**How it works now:**
+- **Portable exe (RUIE.exe)**: Single clean launch, shows warning if not admin
+- **From source (python launcher.py)**: Still re-executes with admin on source mode (development unchanged)
+
+**For full features (optional):**
+- Right-click `RUIE.exe` → "Run as administrator"
+- This gives permission to modify Star Citizen launcher files
+
+---
+
 ## Common Build Issues & Solutions
 
 ### Issue 1: PyInstaller Not Found
@@ -400,6 +438,93 @@ ArchitecturesAllowed=x64
 
 **Result:**
 The installer will compile successfully and display the professional modern wizard interface with Inno Setup's default images.
+
+---
+
+### Issue 6.8: Missing Custom Message Constants
+
+**Error Message:**
+```
+Error on line 30: A custom message named "CreateDesktopIconTask" has not been defined.
+Compile aborted.
+```
+
+**Cause:**
+The `.iss` script was using Inno Setup's localized message constants that weren't properly defined:
+```ini
+Name: "desktopicon"; Description: "{cm:CreateDesktopIconTask}"; ...
+Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIconTask}"; ...
+Name: "{group}\{cm:UninstallProgram,RUIE}"; ...
+Description: "{cm:LaunchProgram,RUIE}"; ...
+```
+
+These constants require specific language file definitions that weren't included.
+
+**Solution:**
+Replace message constants with plain English text strings:
+
+**Before (WRONG)**:
+```ini
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIconTask}"; ...
+Name: "quicklaunchicon"; Description: "{cm:CreateQuickLaunchIconTask}"; ...
+```
+
+**After (CORRECT)**:
+```ini
+[Tasks]
+Name: "desktopicon"; Description: "Create a desktop icon"; ...
+```
+
+**Why it was fixed:**
+- Message constants require language file mappings
+- Plain text is simpler and doesn't require localization setup
+- English text is sufficient for international users
+- Removes dependency on language files
+
+---
+
+### Issue 6.9: Unknown Pascal Identifiers
+
+**Error Message:**
+```
+Error on line 58: Unknown identifier 'ssFinished'
+Compile aborted.
+```
+
+**Cause:**
+The `.iss` script included custom Pascal code procedures that reference identifiers that don't exist in the current Inno Setup version:
+```pascal
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssFinished then
+```
+
+These procedures are version-specific and may not work reliably across different Inno Setup installations.
+
+**Solution:**
+Remove custom Pascal code and use Inno Setup's built-in functionality instead.
+
+**What was removed:**
+```pascal
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+  { Shows finish message }
+procedure InitializeWizard();
+  { Shows disclaimer message }
+```
+
+**Why it was fixed:**
+- Custom Pascal code is not necessary for basic installer functionality
+- Inno Setup's built-in features handle installer flow
+- Simplifies the script and eliminates version compatibility issues
+- Disclaimer is already in documentation and README
+
+**Alternative:**
+If you need custom installer behavior, use Inno Setup's built-in features:
+- `[InstallDelete]` section for cleanup
+- `[Run]` section for post-install actions
+- Standard wizard flow (doesn't need custom Pascal)
 
 ---
 

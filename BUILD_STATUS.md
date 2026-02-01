@@ -2,22 +2,26 @@
 
 ## Recent Updates (Feb 1, 2026)
 
-### Issues Fixed:
+### Build & Deployment Issues Fixed:
 1. ✅ **Inno Setup `/cc` flag error** - Removed invalid flag from build script
 2. ✅ **Wizard image file errors** - Removed missing image file references from `.iss` script
-3. ✅ **Update checker security** - Security audit completed, no vulnerabilities found
+3. ✅ **Missing custom message errors** - Removed localized message constants that weren't defined
+4. ✅ **Pascal code compilation errors** - Removed problematic Pascal procedure that was causing identifier errors
+5. ✅ **Portable exe double-launch issue** - Fixed admin privilege re-execution logic in frozen mode
 
 ### Files Updated:
 - `build_installer.bat` - Fixed Inno Setup compiler flags
-- `RUIE_Installer.iss` - Removed problematic wizard image references
-- `BUILD_TROUBLESHOOTING.md` - Added Issues 6.6 & 6.7 documentation
+- `RUIE_Installer.iss` - Cleaned up configuration (removed problematic wizard images, messages, and code)
+- `launcher.py` - Fixed admin privilege request to prevent double-launch in compiled mode
+- `BUILD_TROUBLESHOOTING.md` - Added Issues 6.6, 6.7, & 6.8 documentation
 - `UPDATE_CHECKER_SECURITY_AUDIT.md` - Comprehensive security review
+- `DOUBLE_LAUNCH_FIX.md` - Documentation of the exe double-launch fix
 
 ---
 
 ## What Was Fixed
 
-The build system is now fully functional with all known issues resolved.
+The build system is now fully functional with all known build and deployment issues resolved.
 
 ---
 
@@ -30,9 +34,14 @@ The build system is now fully functional with all known issues resolved.
    - Configured for no-console GUI application
 
 2. ✅ **`BUILD_TROUBLESHOOTING.md`** - Comprehensive build guide
-   - Troubleshoots common build issues (7+ issues covered)
+   - Troubleshoots common build issues (9+ issues covered)
    - Provides step-by-step solutions
    - Advanced build options
+
+3. ✅ **`DOUBLE_LAUNCH_FIX.md`** - Exe deployment issue fix
+   - Explains double-launch issue and root cause
+   - Documents the fix applied
+   - User instructions for rebuilding
 
 ### Updated Files:
 1. ✅ **`build_installer.bat`** - Enhanced build script
@@ -42,9 +51,18 @@ The build system is now fully functional with all known issues resolved.
    - Clear status messages
 
 2. ✅ **`RUIE_Installer.iss`** - Inno Setup configuration
-   - Fixed wizard image file references
+   - Removed problematic wizard image references
    - Uses default modern wizard style
-   - Ready for compilation
+   - Removed undefined message constants
+   - Removed problematic Pascal code
+   - Clean and minimal configuration
+   - Ready for reliable compilation
+
+3. ✅ **`launcher.py`** - Desktop app launcher
+   - Fixed admin privilege request logic
+   - Detects frozen (compiled) mode
+   - Prevents double-launch in exe mode
+   - Clean single startup
 
 ---
 

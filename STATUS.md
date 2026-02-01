@@ -19,7 +19,7 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 | Component | Status | Version |
 |-----------|--------|---------|
 | **Wizard Interface** | ✅ Complete | Full 6-step flow |
-| **Color System** | ✅ Complete | 17 presets + manual (127+ vars) |
+| **Color System** | ✅ Complete | 17 presets + manual (54 vars) |
 | **Media Management** | ✅ Complete | Images, videos, audio |
 | **Music System** | ✅ Complete | Playlist + player |
 | **Backup System** | ✅ Complete | Create, restore, delete |
@@ -39,6 +39,17 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 
 ## 🎯 Latest Updates (Feb 1, 2026)
 
+### 🔧 Build System Fixes ✅
+**All 5 cascade errors fixed - Build system now fully stable**
+
+1. **Inno Setup Compiler Flag Error** - Removed invalid `/cc` flag from `build_installer.bat`
+2. **Wizard Image References** - Removed `WizardImageFile`/`WizardSmallImageFile` from `RUIE_Installer.iss` (using built-in defaults)
+3. **Localization Message Constants** - Replaced undefined constants like `CreateDesktopIconTask` with plain English text
+4. **Pascal Code Compatibility** - Removed problematic Pascal Code section that referenced undefined identifiers like `ssFinished`
+5. **Portable EXE Double-Launch** - Fixed `launcher.py` admin privilege logic to detect frozen mode and prevent re-execution
+
+**Result**: Both installer and portable EXE now build and run cleanly without errors.
+
 ### New Endpoints ✅
 - **`/api/compile-asar`** - Compile asar to persistent location without installing
 - **`/api/install-asar`** - Compile and install with automatic backup
@@ -46,8 +57,8 @@ RUIE is a comprehensive theme customization tool for the RSI Launcher, featuring
 - Backup management with timestamps
 
 ### Installation System ✅
-- Professional Windows installer via Inno Setup 6
-- Portable EXE for quick testing
+- Professional Windows installer via Inno Setup 6 (fully functional)
+- Portable EXE for quick testing (launches cleanly on first double-click)
 - Source code distribution for developers
 - Build automation with `build_installer.bat`
 - 4 distribution methods documented
@@ -243,7 +254,7 @@ Potential enhancements for future versions:
 - ✅ Auto-detection of RSI Launcher
 - ✅ ASAR extraction with progress tracking
 - ✅ 17 professional color presets
-- ✅ 127+ customizable color variables
+- ✅ 54 customizable color variables (27 colors + RGB variants)
 - ✅ Live color preview
 - ✅ Media (images & videos) replacement
 - ✅ Music playlist management

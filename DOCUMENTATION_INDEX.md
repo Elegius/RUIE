@@ -26,6 +26,7 @@
 ### 🏗️ Build & Deployment
 - **[BUILD_STATUS.md](BUILD_STATUS.md)** - Build system overview and PyInstaller configuration
 - **[BUILD_TROUBLESHOOTING.md](BUILD_TROUBLESHOOTING.md)** - 10+ common build issues and solutions
+- **[BUILD_FIXES_SUMMARY.md](BUILD_FIXES_SUMMARY.md)** - 📋 **NEW** - Summary of all 5 build fixes applied in v0.2 Alpha with detailed documentation
 - **[INSTALLER_SETUP.md](INSTALLER_SETUP.md)** - Inno Setup 6 installer configuration
 - **[INSTALLATION_QUICKREF.md](INSTALLATION_QUICKREF.md)** - One-page quick reference for all installation options
 
