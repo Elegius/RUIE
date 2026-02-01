@@ -7,10 +7,10 @@ import ctypes
 import threading
 import logging
 from pathlib import Path
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import QUrl, QTimer
-from PyQt5.QtGui import QIcon
+from PyQt5.QtWidgets import QApplication, QMainWindow, QTextEdit, QVBoxLayout, QWidget, QPushButton
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEnginePage
+from PyQt5.QtCore import QUrl, QTimer, pyqtSignal, QObject
+from PyQt5.QtGui import QIcon, QFont
 import waitress  # Required for production WSGI server - must be at module level for PyInstaller
 
 # Version info
@@ -102,12 +102,103 @@ def request_admin():
     else:
         logger.info("✓ Running with admin privileges ✓")
 
+
+class DebugEmitter(QObject):
+    """Signal emitter for debug messages."""
+    debug_signal = pyqtSignal(str)
+
+
+class DebugWindow(QMainWindow):
+    """Separate window for displaying debug information."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle(f'{APP_NAME} v{APP_VERSION} - Debug Console')
+        self.setGeometry(1400, 100, 600, 700)
+        self.setMinimumSize(400, 300)
+        
+        # Create text area
+        central_widget = QWidget()
+        layout = QVBoxLayout()
+        
+        self.text_area = QTextEdit()
+        self.text_area.setReadOnly(True)
+        self.text_area.setStyleSheet('''
+            QTextEdit {
+                background-color: #0a0e27;
+                color: #00d4ff;
+                font-family: 'Courier New', monospace;
+                font-size: 10pt;
+                border: 1px solid #00d4ff;
+                padding: 5px;
+            }
+        ''')
+        font = QFont('Courier New', 9)
+        font.setFixedPitch(True)
+        self.text_area.setFont(font)
+        
+        layout.addWidget(self.text_area)
+        
+        # Add clear button
+        clear_btn = QPushButton('Clear')
+        clear_btn.setStyleSheet('''
+            QPushButton {
+                background-color: #1a3a4a;
+                color: #00d4ff;
+                border: 1px solid #00d4ff;
+                padding: 5px 15px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #2a4a5a;
+            }
+        ''')
+        clear_btn.clicked.connect(self.text_area.clear)
+        
+        layout.addWidget(clear_btn)
+        
+        central_widget.setLayout(layout)
+        self.setCentralWidget(central_widget)
+        
+        # Create emitter for thread-safe signals
+        self.emitter = DebugEmitter()
+        self.emitter.debug_signal.connect(self.add_debug_message)
+        
+        # Set dark theme
+        self.setStyleSheet('''
+            QMainWindow {
+                background-color: #0a0e27;
+            }
+        ''')
+        
+        logger.info('Debug window created')
+    
+    def add_debug_message(self, message: str):
+        """Add a debug message to the display."""
+        self.text_area.append(message)
+        # Auto-scroll to bottom
+        self.text_area.verticalScrollBar().setValue(
+            self.text_area.verticalScrollBar().maximum()
+        )
+    
+    def closeEvent(self, event):
+        """Allow closing debug window without closing main app."""
+        logger.info('Debug window closed')
+        event.accept()
+
+
 class LauncherApp(QMainWindow):
     def __init__(self, port=5000):
         super().__init__()
         self.port = port
         self.server_process = None
         self.server_thread = None
+        
+        # Create debug window
+        self.debug_window = DebugWindow(self)
+        self.debug_window.show()
+        
+        self.add_debug_message('[LAUNCHER] RUIE initialized')
         
         self.setWindowTitle(f'{APP_NAME} v{APP_VERSION}')
         self.setGeometry(100, 100, 1280, 820)
@@ -122,6 +213,24 @@ class LauncherApp(QMainWindow):
         self.browser = QWebEngineView()
         self.setCentralWidget(self.browser)
         
+        # CRITICAL: Enable JavaScript in the WebEngine
+        try:
+            # Try to access settings and enable JavaScript
+            page = self.browser.page()
+            settings = page.settings()
+            # Try different attribute names depending on PyQt5 version
+            try:
+                from PyQt5.QtWebEngineCore import QWebEngineSettings
+                settings.setAttribute(QWebEngineSettings.JavascriptEnabled, True)
+                logger.info("JavaScript enabled via QWebEngineSettings")
+            except ImportError:
+                # Fallback for older PyQt5 versions
+                settings.setAttribute(32, True)  # 32 is JavascriptEnabled attribute code
+                logger.info("JavaScript enabled via attribute code")
+        except Exception as e:
+            logger.warning(f"Could not explicitly enable JavaScript: {e}")
+            logger.info("JavaScript should be enabled by default")
+        
         # Show enhanced loading screen with progress
         self.show_loading_screen()
         
@@ -130,6 +239,14 @@ class LauncherApp(QMainWindow):
         
         # Load UI after server is ready
         self.check_and_load_ui()
+    
+    def add_debug_message(self, message: str):
+        """Add a message to the debug window."""
+        try:
+            if hasattr(self, 'debug_window') and self.debug_window:
+                self.debug_window.emitter.debug_signal.emit(message)
+        except Exception as e:
+            logger.error(f'Error sending debug message: {e}')
     
     def show_loading_screen(self):
         """Display an enhanced loading screen with progress bar and status messages."""
@@ -342,6 +459,11 @@ class LauncherApp(QMainWindow):
         '''
         self.browser.setHtml(loading_html)
         logger.info("Enhanced loading screen displayed")
+        
+        # CRITICAL: Show the window so it's visible to the user
+        self.show()
+        self.activateWindow()
+        logger.info("Window shown and activated")
     
     def start_server(self):
         """Start the production Flask server as a subprocess or thread."""
@@ -542,7 +664,412 @@ class LauncherApp(QMainWindow):
         """Load the web UI."""
         url = QUrl(f'http://127.0.0.1:{self.port}')
         logger.info(f'Loading UI from {url.toString()}')
+        
+        # Ensure window is visible before loading
+        self.show()
+        self.activateWindow()
+        self.raise_()
+        
         self.browser.load(url)
+        logger.info('Browser load command sent, window should be visible')
+        
+        # Inject startApp() call after page loads
+        def inject_initialization():
+            logger.info('[PYTHON] Injecting initialization code')
+            
+            # First, fetch the launcher info from the API
+            try:
+                import urllib.request
+                import json
+                response = urllib.request.urlopen('http://127.0.0.1:5000/api/detect-launcher')
+                data = json.loads(response.read().decode())
+                asar_path = ''
+                if data.get('success') and data.get('launcher'):
+                    asar_path = data['launcher'].get('asarPath', '')
+                    logger.info(f'[PYTHON] Got asarPath: {asar_path}')
+                else:
+                    logger.warning('[PYTHON] Failed to get launcher info')
+                
+                # Now inject JavaScript to fill the field and setup button handlers
+                js_code = f'''
+                (function() {{
+                    console.log('[INJECTED] Starting initialization');
+                    
+                    // Set asarPath field
+                    var asarField = document.getElementById('asarPath');
+                    if (asarField) {{
+                        asarField.value = {repr(asar_path)};
+                        console.log('[INJECTED] Set asarPath to:', asarField.value);
+                    }}
+                    
+                    // Show success indicator
+                    var indicator = document.getElementById('path-success-indicator');
+                    if (indicator) {{
+                        indicator.style.display = 'block';
+                    }}
+                    
+                    // Update status
+                    var status = document.getElementById('init-status');
+                    if (status) {{
+                        status.innerHTML = '✓ Launcher detected';
+                        status.className = 'status show success';
+                    }}
+                    
+                    // Replace all button onclick handlers
+                    var buttons = document.querySelectorAll('button');
+                    console.log('[INJECTED] Found ' + buttons.length + ' buttons');
+                    
+                    // Button handler mappings - call API endpoints for all operations
+                    var handlerMappings = {{
+                        'extractAsar': function() {{
+                            console.log('[HANDLER] extractAsar called');
+                            var extractStatus = document.getElementById('extract-status');
+                            var extractBtn = document.getElementById('extract-btn');
+                            if (extractStatus) {{
+                                extractStatus.innerHTML = '⏳ Creating backup and decompiling (this may take a moment due to Windows Defender scanning)...';
+                                extractStatus.className = 'status show info';
+                            }}
+                            if (extractBtn) extractBtn.disabled = true;
+                            var progressDiv = document.getElementById('extract-progress');
+                            if (progressDiv) progressDiv.style.display = 'block';
+                            
+                            fetch('/api/extract', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/json'}},
+                                body: JSON.stringify({{asarPath: asarField.value}})
+                            }})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    console.log('[HANDLER] Extract response:', data);
+                                    if (data.success) {{
+                                        if (extractStatus) {{
+                                            extractStatus.innerHTML = '✓ Decompilation complete! Backup created. Ready to customize.';
+                                            extractStatus.className = 'status show success';
+                                        }}
+                                        // Reload the extracts list
+                                        if (typeof window.loadExtracts === 'function') {{
+                                            window.loadExtracts();
+                                        }}
+                                    }} else {{
+                                        if (extractStatus) {{
+                                            var errorMsg = data.error || 'Unknown error';
+                                            if (data.details) {{
+                                                errorMsg += ' (' + data.details + ')';
+                                            }}
+                                            extractStatus.innerHTML = '✗ Error: ' + errorMsg;
+                                            extractStatus.className = 'status show error';
+                                        }}
+                                    }}
+                                    if (progressDiv) progressDiv.style.display = 'none';
+                                    if (extractBtn) extractBtn.disabled = false;
+                                }})
+                                .catch(e => {{
+                                    console.error('[HANDLER] Extract error:', e);
+                                    if (extractStatus) {{
+                                        extractStatus.innerHTML = '✗ Error: ' + e.message;
+                                        extractStatus.className = 'status show error';
+                                    }}
+                                    if (progressDiv) progressDiv.style.display = 'none';
+                                }});
+                        }},
+                        'browseForAsar': function() {{
+                            console.log('[HANDLER] browseForAsar called');
+                            fetch('/api/browse-for-asar', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}}})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    if (data.success && data.path) {{
+                                        asarField.value = data.path;
+                                        console.log('[HANDLER] Selected path:', data.path);
+                                    }}
+                                }})
+                                .catch(e => console.error('[HANDLER] Browse error:', e));
+                        }},
+                        'detectLauncher': function() {{
+                            console.log('[HANDLER] detectLauncher called');
+                            if (status) {{
+                                status.innerHTML = '✓ Already detected';
+                            }}
+                        }},
+                        'initSession': function() {{
+                            console.log('[HANDLER] initSession called');
+                            if (!asarField.value) {{
+                                alert('Please select or auto-detect the app.asar path first');
+                                return;
+                            }}
+                            if (status) {{
+                                status.innerHTML = 'Initializing session...';
+                                status.className = 'status show info';
+                            }}
+                            fetch('/api/init', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/json'}},
+                                body: JSON.stringify({{asarPath: asarField.value}})
+                            }})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    console.log('[HANDLER] Init response:', data);
+                                    if (data.success) {{
+                                        if (status) {{
+                                            status.innerHTML = '✓ Session initialized - ready to decompile!';
+                                            status.className = 'status show success';
+                                        }}
+                                        // Load extracted folders and backups
+                                        if (typeof window.loadExtracts === 'function') {{
+                                            console.log('[HANDLER] Calling loadExtracts()');
+                                            window.loadExtracts().catch(e => console.error('[HANDLER] loadExtracts error:', e));
+                                        }} else {{
+                                            console.warn('[HANDLER] loadExtracts function not found');
+                                        }}
+                                    }} else {{
+                                        if (status) {{
+                                            status.innerHTML = '✗ Error: ' + (data.error || 'Unknown error');
+                                            status.className = 'status show error';
+                                        }}
+                                    }}
+                                }})
+                                .catch(e => {{
+                                    console.error('[HANDLER] Init error:', e);
+                                    if (status) {{
+                                        status.innerHTML = '✗ Error: ' + e.message;
+                                        status.className = 'status show error';
+                                    }}
+                                }});
+                        }},
+                        'applyColors': function() {{
+                            console.log('[HANDLER] applyColors called');
+                            fetch('/api/apply-colors', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/json'}},
+                                body: JSON.stringify({{}})
+                            }})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    console.log('[HANDLER] Apply colors response:', data);
+                                    var colorStatus = document.getElementById('apply-status');
+                                    if (colorStatus) {{
+                                        if (data.success) {{
+                                            colorStatus.innerHTML = '✓ Colors applied successfully';
+                                            colorStatus.className = 'status show success';
+                                        }} else {{
+                                            colorStatus.innerHTML = '✗ Error: ' + (data.error || 'Unknown error');
+                                            colorStatus.className = 'status show error';
+                                        }}
+                                    }}
+                                }})
+                                .catch(e => {{
+                                    console.error('[HANDLER] Apply colors error:', e);
+                                    var colorStatus = document.getElementById('apply-status');
+                                    if (colorStatus) {{
+                                        colorStatus.innerHTML = '✗ Error: ' + e.message;
+                                        colorStatus.className = 'status show error';
+                                    }}
+                                }});
+                        }},
+                        'applyMedia': function() {{
+                            console.log('[HANDLER] applyMedia called');
+                            fetch('/api/apply-media', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/json'}},
+                                body: JSON.stringify({{}})
+                            }})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    console.log('[HANDLER] Apply media response:', data);
+                                    var mediaStatus = document.getElementById('media-status');
+                                    if (mediaStatus) {{
+                                        if (data.success) {{
+                                            mediaStatus.innerHTML = '✓ Media applied successfully';
+                                            mediaStatus.className = 'status show success';
+                                        }} else {{
+                                            mediaStatus.innerHTML = '✗ Error: ' + (data.error || 'Unknown error');
+                                            mediaStatus.className = 'status show error';
+                                        }}
+                                    }}
+                                }})
+                                .catch(e => {{
+                                    console.error('[HANDLER] Apply media error:', e);
+                                    var mediaStatus = document.getElementById('media-status');
+                                    if (mediaStatus) {{
+                                        mediaStatus.innerHTML = '✗ Error: ' + e.message;
+                                        mediaStatus.className = 'status show error';
+                                    }}
+                                }});
+                        }},
+                        'navigateToPage': function(pageNum) {{
+                            return function() {{
+                                console.log('[HANDLER] navigateToPage called with page:', pageNum);
+                                var pages = document.querySelectorAll('[data-page]');
+                                pages.forEach(p => p.style.display = 'none');
+                                var targetPage = document.querySelector('[data-page="' + pageNum + '"]');
+                                if (targetPage) targetPage.style.display = 'block';
+                            }};
+                        }},
+                        'addColorMapping': function() {{
+                            console.log('[HANDLER] addColorMapping called');
+                            // This would need to add a new color mapping row dynamically
+                            // For now, we can show a placeholder
+                            alert('Add Color Mapping - will implement dynamic form addition');
+                        }},
+                        'importThemeFromColors': function() {{
+                            console.log('[HANDLER] importThemeFromColors called');
+                            // Would open file dialog in the future
+                            alert('Import Theme - will implement file selection');
+                        }},
+                        'exportCurrentPreset': function() {{
+                            console.log('[HANDLER] exportCurrentPreset called');
+                            fetch('/api/config/export', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/json'}},
+                                body: JSON.stringify({{}})
+                            }})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    if (data.success) {{
+                                        alert('✓ Preset exported to ' + data.path);
+                                    }} else {{
+                                        alert('✗ Export failed: ' + (data.error || 'Unknown error'));
+                                    }}
+                                }})
+                                .catch(e => alert('✗ Export error: ' + e.message));
+                        }},
+                        'saveCurrentPreset': function() {{
+                            console.log('[HANDLER] saveCurrentPreset called');
+                            var presetName = prompt('Enter preset name:');
+                            if (presetName) {{
+                                fetch('/api/save-preset', {{
+                                    method: 'POST',
+                                    headers: {{'Content-Type': 'application/json'}},
+                                    body: JSON.stringify({{name: presetName}})
+                                }})
+                                    .then(r => r.json())
+                                    .then(data => {{
+                                        if (data.success) {{
+                                            alert('✓ Preset saved');
+                                        }} else {{
+                                            alert('✗ Save failed: ' + (data.error || 'Unknown error'));
+                                        }}
+                                    }})
+                                    .catch(e => alert('✗ Save error: ' + e.message));
+                            }}
+                        }},
+                        'useSelectedExtract': function() {{
+                            console.log('[HANDLER] useSelectedExtract called');
+                            var selected = document.querySelector('.extract-item.selected');
+                            if (selected) {{
+                                var extractPath = selected.getAttribute('data-path');
+                                fetch('/api/use-extract', {{
+                                    method: 'POST',
+                                    headers: {{'Content-Type': 'application/json'}},
+                                    body: JSON.stringify({{path: extractPath}})
+                                }})
+                                    .then(r => r.json())
+                                    .then(data => {{
+                                        if (data.success) {{
+                                            alert('✓ Using extraction: ' + extractPath);
+                                        }} else {{
+                                            alert('✗ Error: ' + (data.error || 'Unknown error'));
+                                        }}
+                                    }})
+                                    .catch(e => alert('✗ Error: ' + e.message));
+                            }} else {{
+                                alert('Please select an extraction first');
+                            }}
+                        }},
+                        'openLatestExtract': function() {{
+                            console.log('[HANDLER] openLatestExtract called');
+                            fetch('/api/open-latest-extract', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}}})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    if (data.success) {{
+                                        alert('✓ Opening latest extraction');
+                                    }} else {{
+                                        alert('✗ Error: ' + (data.error || 'No extractions found'));
+                                    }}
+                                }})
+                                .catch(e => alert('✗ Error: ' + e.message));
+                        }},
+                        'createNewBackup': function() {{
+                            console.log('[HANDLER] createNewBackup called');
+                            var backupName = prompt('Enter backup name:');
+                            if (backupName) {{
+                                fetch('/api/backups', {{
+                                    method: 'POST',
+                                    headers: {{'Content-Type': 'application/json'}},
+                                    body: JSON.stringify({{name: backupName}})
+                                }})
+                                    .then(r => r.json())
+                                    .then(data => {{
+                                        if (data.success) {{
+                                            alert('✓ Backup created');
+                                        }} else {{
+                                            alert('✗ Backup failed: ' + (data.error || 'Unknown error'));
+                                        }}
+                                    }})
+                                    .catch(e => alert('✗ Backup error: ' + e.message));
+                            }}
+                        }},
+                        'addMusicFile': function() {{
+                            console.log('[HANDLER] addMusicFile called');
+                            alert('Add Music File - will implement file selection dialog');
+                        }},
+                        'loadDefaultMusic': function() {{
+                            console.log('[HANDLER] loadDefaultMusic called');
+                            fetch('/api/clear-music', {{method: 'POST', headers: {{'Content-Type': 'application/json'}}}})
+                                .then(r => r.json())
+                                .then(data => {{
+                                    if (data.success) {{
+                                        alert('✓ Music reset to default');
+                                    }} else {{
+                                        alert('✗ Error: ' + (data.error || 'Unknown error'));
+                                    }}
+                                }})
+                                .catch(e => alert('✗ Error: ' + e.message));
+                        }}
+                    }};
+                    
+                    // Attach handlers to all buttons
+                    for (var i = 0; i < buttons.length; i++) {{
+                        var btn = buttons[i];
+                        var onclickAttr = btn.getAttribute('onclick');
+                        
+                        if (onclickAttr) {{
+                            // Extract function name and parameters from onclick
+                            var match = onclickAttr.match(/^\\s*(\\w+)\\s*(\\((.*?)\\))?\\s*$/);
+                            if (match) {{
+                                var funcName = match[1];
+                                var params = match[3] ? match[3].split(',').map(s => s.trim()) : [];
+                                
+                                if (handlerMappings[funcName]) {{
+                                    console.log('[INJECTED] Attaching handler for', funcName);
+                                    
+                                    // Remove the original onclick
+                                    btn.removeAttribute('onclick');
+                                    
+                                    // Create and attach new click handler
+                                    if (params.length > 0) {{
+                                        // Functions with parameters like navigateToPage(2)
+                                        var pageNum = parseInt(params[0]);
+                                        btn.addEventListener('click', handlerMappings[funcName](pageNum));
+                                    }} else {{
+                                        // Functions without parameters
+                                        btn.addEventListener('click', handlerMappings[funcName]);
+                                    }}
+                                }}
+                            }}
+                        }}
+                    }}
+                    
+                    console.log('[INJECTED] All button handlers attached');
+                }})();
+                '''
+                logger.info('[PYTHON] Injecting field population and button handlers')
+                self.browser.page().runJavaScript(js_code)
+                
+            except Exception as e:
+                logger.error(f'[PYTHON] Error during initialization: {e}')
+        
+        # Schedule injection after page has time to load
+        QTimer.singleShot(4000, inject_initialization)
     
     def show_error(self, message):
         """Show an error message in the browser."""

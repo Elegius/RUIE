@@ -6,60 +6,113 @@
     <title>RUIE</title>
     <link rel="icon" type="image/x-icon" href="/icon.ico">
     <link rel="stylesheet" href="styles.css?v=20260201d">
+    <!-- Load app.js first -->
     <script src="app.js?v=20260201"></script>
 </head>
 <body>
     <script>
-    window.inlineScriptRan = true;
-    console.log('[INLINE] JavaScript is running');
-    // Try to access app.js
-    setTimeout(() => {
-        let status = 'app: ';
-        if (typeof state !== 'undefined') {
-            status += '✓ | ';
-        } else {
-            status += '✗ | ';
+    // Create error display FIRST, before anything else
+    const errorDiv = document.createElement('div');
+    errorDiv.id = 'error-display';
+    errorDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 500px; z-index: 999999; border-radius: 5px; max-height: 200px; overflow-y: auto; display: none;';
+    document.documentElement.appendChild(errorDiv);
+    
+    function showError(msg) {
+        console.error('[ERROR]', msg);
+        errorDiv.style.display = 'block';
+        errorDiv.innerHTML = (errorDiv.innerHTML || '') + '\n' + msg;
+        // Also send to server
+        if (typeof fetch !== 'undefined') {
+            fetch('/api/debug-log', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'INLINE: ' + msg, level: 'ERROR' })
+            }).catch(() => {});
         }
-        status += 'startApp: ';
-        if (window.appStarted) {
-            status += '✓ | ';
-        } else {
-            status += '✗ | ';
+    }
+    
+    // Send init message to server
+    if (typeof fetch !== 'undefined') {
+        fetch('/api/debug-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'INLINE: Inline script executing', level: 'INFO' })
+        }).catch(() => {});
+    }
+    
+    // Check if app.js loaded
+    if (typeof startApp === 'undefined') {
+        showError('CRITICAL: startApp function not found - app.js may not have loaded');
+    } else {
+        console.log('[INLINE] startApp function exists, calling it now');
+        fetch('/api/debug-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'INLINE: startApp function found, about to call', level: 'INFO' })
+        }).catch(() => {});
+    }
+    
+    // Wait for document to be ready
+    function tryStartApp() {
+        try {
+            if (typeof startApp === 'function') {
+                console.log('[INLINE] Calling startApp()');
+                fetch('/api/debug-log', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: 'INLINE: Calling startApp()', level: 'INFO' })
+                }).catch(() => {});
+                const result = startApp();
+                if (result && typeof result.catch === 'function') {
+                    result.catch(function(err) {
+                        showError('startApp error: ' + (err?.message || String(err)));
+                    });
+                }
+            } else {
+                showError('startApp not a function');
+            }
+        } catch (err) {
+            showError('Error calling startApp: ' + (err?.message || String(err)));
         }
-        status += 'DOM: ';
-        if (window.DOM && window.DOM.asarPath) {
-            status += '✓ asarPath=' + window.DOM.asarPath.value;
-        } else {
-            status += '✗ asarPath=' + (window.DOM ? 'exists' : 'no DOM');
-        }
-        document.body.innerHTML = '<div style="color: #0f0; background: #000; padding: 20px; font-family: monospace; position: fixed; top: 0; left: 0; right: 0; z-index: 99999; white-space: pre-wrap; word-wrap: break-word;">' + status + '</div>' + document.body.innerHTML;
-    }, 500);
+    }
+    
+    // Try immediately
+    tryStartApp();
+    
+    // Also try on DOMContentLoaded
+    document.addEventListener('DOMContentLoaded', tryStartApp);
+    
+    // Also try after a delay
+    setTimeout(tryStartApp, 1000);
     </script>
+    
     <div class="container">
-        <!-- Minimal Header -->
+        <!-- Header with Update Manager Button -->
         <header class="header">
             <div class="header-content">
                 <h1>RUIE</h1>
+                <button id="update-manager-btn" class="header-update-btn" onclick="openUpdateManager()" title="Check for updates and manage versions">⚙️ Update Manager</button>
             </div>
         </header>
 
         <!-- Main Content Area -->
         <main class="content-wrapper">
             <!-- Step 1: Initialize & Extract (Combined) -->
+            <!-- Full Width: Path Detection Section -->
             <section class="step page" id="step-1" data-page="1">
                 <h2>Step 1: Prepare & Extract</h2>
                 
-                <!-- Full Width: App.asar Detection -->
-                <div class="setup-panel" style="margin-bottom: 20px;">
+                <!-- FULL WIDTH: App.asar Detection & Selection -->
+                <div class="setup-panel" style="width: 100%; margin-bottom: 25px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">App.asar Detection & Selection</h3>
+                        <h3 style="margin: 0;">📍 App.asar Detection & Selection</h3>
                     </div>
                     <div class="form-group" style="display: flex; align-items: center; gap: 15px; width: 100%;">
-                        <div style="display: flex; align-items: center; gap: 10px; width: 50%;">
-                            <input type="text" id="asarPath" placeholder="Path to app.asar" style="flex: 1; cursor: pointer;" readonly>
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
+                            <input type="text" id="asarPath" placeholder="Path to app.asar" style="flex: 1; cursor: pointer;">
                             <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar" onclick="browseForAsar()">✓</span>
                         </div>
-                        <div style="display: flex; gap: 10px; flex: 1; justify-content: flex-end;">
+                        <div style="display: flex; gap: 10px;">
                             <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="browseForAsar()">📁 Browse</button>
                             <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="detectLauncher()">🔍 Auto-Detect</button>
                             <button id="init-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="initSession()">Initialize</button>
@@ -79,7 +132,7 @@
                         <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Extract and manage ASAR versions.</p>
                         
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Extract app.asar</button>
+                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Decompile app.asar</button>
                             <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
                         </div>
 
@@ -95,7 +148,6 @@
                                 Loading extractions...
                             </div>
                         </div>
-                        <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.85em; padding: 8px 12px; width: calc(50% - 5px); display: block; margin-left: auto; margin-right: auto;" onclick="useSelectedExtract()">Use Selected</button>
                     </div>
 
                     <!-- Right Column: Backup Manager -->

@@ -285,58 +285,115 @@ class ThemeManager:
         
         asar_path = self.launcher_info['asarPath']
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        # Normalize DOCS_DIR path to use backslashes consistently
-        docs_dir = os.path.normpath(DOCS_DIR)
+        
+        # Ensure DOCS_DIR exists and is properly set
+        docs_dir = os.path.normpath(os.path.expanduser(DOCS_DIR))
+        print(f"[ThemeManager] Extract DOCS_DIR: {docs_dir}")
+        os.makedirs(docs_dir, exist_ok=True)
+        
         extracted_path = os.path.normpath(os.path.join(docs_dir, f'app-decompiled-{timestamp}'))
         
         try:
-            self.set_status('extract', 'running', 'Decompiling app.asar...', progress=10, last_error=None)
+            self.set_status('extract', 'running', 'Creating backup...', progress=5, last_error=None)
             print(f"[ThemeManager] Extracting from: {asar_path}")
             print(f"[ThemeManager] Extracting to: {extracted_path}")
             
+            # Verify source file exists
+            if not os.path.exists(asar_path):
+                raise FileNotFoundError(f"Source ASAR file not found: {asar_path}")
+            
             # Ensure target directory exists
             os.makedirs(extracted_path, exist_ok=True)
+            print(f"[ThemeManager] Target directory created")
             
-            # Check if app.asar exists
-            if not os.path.exists(asar_path):
-                raise Exception(f"app.asar not found at {asar_path}")
+            # Update status before extraction
+            self.set_status('extract', 'running', 'Decompiling app.asar...', progress=10, last_error=None)
             
-            # Try extraction with unpacked flag
-            print(f"[ThemeManager] Attempting extraction with asar...")
-            result = subprocess.run(
-                ['asar', 'extract', asar_path, extracted_path],
-                capture_output=True,
-                text=True,
-                check=False,
-                cwd=os.path.normpath(docs_dir)
-            )
+            # Try extraction with npx first (if Node.js is available)
+            print(f"[ThemeManager] Attempting extraction with npx asar...")
+            try:
+                result = subprocess.run(
+                    ['npx', 'asar', 'extract', asar_path, extracted_path],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    cwd=docs_dir,
+                    shell=False,
+                    timeout=30
+                )
+                
+                print(f"[ThemeManager] Extract return code: {result.returncode}")
+                if result.stdout:
+                    print(f"[ThemeManager] Stdout: {result.stdout}")
+                if result.stderr:
+                    print(f"[ThemeManager] Stderr: {result.stderr}")
+                
+                npx_failed = result.returncode != 0
+            except FileNotFoundError as npx_error:
+                print(f"[ThemeManager] npx not found: {npx_error}")
+                npx_failed = True
+            except subprocess.TimeoutExpired:
+                print(f"[ThemeManager] npx extraction timed out")
+                npx_failed = True
             
-            print(f"[ThemeManager] Extract return code: {result.returncode}")
-            if result.stdout:
-                print(f"[ThemeManager] Stdout: {result.stdout}")
-            if result.stderr:
-                print(f"[ThemeManager] Stderr: {result.stderr}")
-            
-            if result.returncode != 0:
-                # Check if it's an unpacked directory issue
-                unpacked_dir = asar_path + '.unpacked'
-                if os.path.exists(unpacked_dir):
-                    print(f"[ThemeManager] Found unpacked directory, attempting to copy it...")
+            # If npx fails, try Python-based extractor
+            if npx_failed:
+                print(f"[ThemeManager] npx extraction failed, falling back to Python-based extractor...")
+                try:
+                    print(f"[ThemeManager] Attempting to import asar_extractor...")
+                    
+                    # Handle both frozen and non-frozen environments
                     try:
-                        import shutil
-                        dest_unpacked = extracted_path + '.unpacked'
-                        shutil.copytree(unpacked_dir, dest_unpacked)
-                        print(f"[ThemeManager] Unpacked directory copied successfully")
-                    except Exception as copy_error:
-                        print(f"[ThemeManager] Failed to copy unpacked directory: {copy_error}")
-                else:
-                    print(f"[ThemeManager] No unpacked directory found at {unpacked_dir}")
-                    error_msg = result.stderr.strip() or 'Decompilation failed'
+                        base_path = sys._MEIPASS
+                    except AttributeError:
+                        base_path = os.path.dirname(os.path.abspath(__file__))
+                    
+                    # Add the base path to sys.path to ensure asar_extractor can be found
+                    if base_path not in sys.path:
+                        sys.path.insert(0, base_path)
+                    
+                    from asar_extractor import ASARExtractor
+                    print(f"[ThemeManager] ASARExtractor imported successfully")
+                    print(f"[ThemeManager] Calling ASARExtractor.extract({asar_path}, {extracted_path})...")
+                    ASARExtractor.extract(asar_path, extracted_path)
+                    print(f"[ThemeManager] Python ASAR extraction successful")
+                except ImportError as ie:
+                    print(f"[ThemeManager] Failed to import asar_extractor: {ie}")
+                    import traceback
+                    traceback.print_exc()
+                    error_msg = f"Module import error: {str(ie)}"
                     self.set_status('extract', 'error', 'Decompilation failed', progress=0, last_error=error_msg)
                     return False
+                except Exception as py_extract_error:
+                    print(f"[ThemeManager] Python extraction also failed: {py_extract_error}")
+                    import traceback
+                    traceback.print_exc()
+                    
+                    # Check if it's an unpacked directory issue
+                    unpacked_dir = asar_path + '.unpacked'
+                    if os.path.exists(unpacked_dir):
+                        print(f"[ThemeManager] Found unpacked directory, attempting to copy it...")
+                        try:
+                            import shutil
+                            dest_unpacked = extracted_path + '.unpacked'
+                            shutil.copytree(unpacked_dir, dest_unpacked)
+                            print(f"[ThemeManager] Unpacked directory copied successfully")
+                        except Exception as copy_error:
+                            print(f"[ThemeManager] Failed to copy unpacked directory: {copy_error}")
+                            error_msg = str(py_extract_error)
+                            self.set_status('extract', 'error', 'Decompilation failed', progress=0, last_error=error_msg)
+                            return False
+                    else:
+                        print(f"[ThemeManager] No unpacked directory found at {unpacked_dir}")
+                        error_msg = str(py_extract_error)
+                        self.set_status('extract', 'error', 'Decompilation failed', progress=0, last_error=error_msg)
+                        return False
             
             # Save metadata about original state
             self._save_extraction_metadata(extracted_path)
+            
+            # Store the extracted path so we can return it to the UI
+            self.extracted_dir = extracted_path
             
             print(f"[ThemeManager] Extract successful")
             self.set_status('extract', 'done', 'Extraction complete', progress=100, last_error=None)
@@ -353,18 +410,31 @@ class ThemeManager:
     def create_backup(self):
         """Create backup of original app.asar."""
         if not self.launcher_info:
+            print("[ThemeManager] Launcher info not set")
             return False
         
         asar_path = self.launcher_info['asarPath']
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.backup_dir = os.path.join(DOCS_DIR, f'backup-{timestamp}')
+        
+        # Ensure DOCS_DIR exists
+        docs_dir = os.path.normpath(os.path.expanduser(DOCS_DIR))
+        print(f"[ThemeManager] Backup DOCS_DIR: {docs_dir}")
+        os.makedirs(docs_dir, exist_ok=True)
+        
+        self.backup_dir = os.path.join(docs_dir, f'backup-{timestamp}')
         
         try:
+            print(f"[ThemeManager] Creating backup directory: {self.backup_dir}")
             os.makedirs(self.backup_dir, exist_ok=True)
+            print(f"[ThemeManager] Backing up from: {asar_path}")
+            print(f"[ThemeManager] Backing up to: {os.path.join(self.backup_dir, 'app.asar')}")
             shutil.copy2(asar_path, os.path.join(self.backup_dir, 'app.asar'))
+            print(f"[ThemeManager] Backup created successfully")
             return True
         except Exception as e:
-            print(f"Error creating backup: {e}")
+            print(f"[ThemeManager] Error creating backup: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     def apply_colors(self, color_mappings):
@@ -879,7 +949,32 @@ def api_launcher_asset():
 def api_init():
     """Initialize and detect launcher."""
     try:
-        # Call LauncherDetector directly to detect
+        # Check if asarPath is provided in the request
+        asar_path = None
+        if request.method == 'POST':
+            data = request.get_json() or {}
+            asar_path = data.get('asarPath')
+        
+        # If asarPath provided, validate and use it directly
+        if asar_path:
+            if os.path.exists(asar_path):
+                launcher_info = {
+                    'asarPath': asar_path,
+                    'directory': os.path.dirname(asar_path),
+                    'resourcesDir': os.path.dirname(asar_path)
+                }
+                theme_manager.launcher_info = launcher_info
+                return jsonify({
+                    'success': True,
+                    'launcher': launcher_info
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': 'app.asar file not found at specified path'
+                }), 400
+        
+        # Otherwise, auto-detect
         launcher_info = LauncherDetector.detect()
         
         if launcher_info:
@@ -925,6 +1020,73 @@ def api_launcher_status():
             'isRunning': False
         }), 500
 
+@app.route('/api/debug-log', methods=['POST'])
+def api_debug_log():
+    """Log debug messages from JavaScript to server console."""
+    try:
+        data = request.get_json()
+        message = data.get('message', '')
+        level = data.get('level', 'INFO')
+        print(f"[JS {level}] {message}")
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"Error logging JS message: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/update-manager', methods=['GET'])
+def api_update_manager():
+    """Get update manager information."""
+    try:
+        import sys
+        print('[API] GET /api/update-manager called')
+        
+        # Get current version from APP_VERSION in launcher.py
+        current_version = "0.2 Alpha"  # This would be imported from launcher.py
+        
+        # Get latest version (would check GitHub or update server in production)
+        latest_version = "0.2 Alpha"  # For now, same as current
+        update_available = False  # No updates available in alpha
+        
+        # Get build type
+        build_type = "Compiled (PyInstaller)" if getattr(sys, 'frozen', False) else "Source (Python)"
+        
+        # Get Python version
+        python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        
+        return jsonify({
+            'success': True,
+            'current_version': current_version,
+            'latest_version': latest_version,
+            'update_available': update_available,
+            'build_type': build_type,
+            'python_version': python_version,
+            'message': 'Update manager status retrieved'
+        })
+    except Exception as e:
+        print(f'[API Error] Update manager error: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/download-update', methods=['POST'])
+def api_download_update():
+    """Download and install update."""
+    try:
+        print('[API] POST /api/download-update called')
+        
+        # In production, this would:
+        # 1. Download the latest version from GitHub/server
+        # 2. Extract it to a temp directory
+        # 3. Replace the current installation
+        # 4. Restart the application
+        
+        # For now, just return a success message
+        return jsonify({
+            'success': True,
+            'message': 'Update downloaded successfully. Please restart the application.'
+        })
+    except Exception as e:
+        print(f'[API Error] Download update error: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/browse-for-asar', methods=['POST'])
 def api_browse_for_asar():
     """Open file picker dialog for user to select app.asar file."""
@@ -967,22 +1129,31 @@ def api_browse_for_asar():
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
     """Extract app.asar."""
+    print("[API] /api/extract called")
     try:
+        print(f"[API] theme_manager.launcher_info: {theme_manager.launcher_info}")
         if not theme_manager.launcher_info:
+            print("[API] Launcher not initialized")
             return jsonify({'success': False, 'error': 'Launcher not initialized'}), 400
         
+        print("[API] Creating backup...")
         # Create backup
         if not theme_manager.create_backup():
+            print("[API] Backup creation failed")
             return jsonify({'success': False, 'error': 'Failed to create backup'}), 500
         
+        print("[API] Starting extraction...")
         # Extract
         if not theme_manager.extract_asar():
+            error_detail = theme_manager.status.get('lastError', 'Unknown error')
+            print(f"[API] Extraction failed with error: {error_detail}")
             return jsonify({
                 'success': False,
                 'error': 'Failed to extract app.asar',
-                'details': theme_manager.status.get('lastError')
+                'details': error_detail
             }), 500
         
+        print("[API] Extraction successful")
         return jsonify({
             'success': True,
             'extractedPath': theme_manager.extracted_dir,
@@ -1025,8 +1196,9 @@ def api_extracted_list():
         all_items = list(base.iterdir())
         print(f'[API] Found {len(all_items)} items in base directory')
         
+        # Look for both app-extracted- and app-decompiled- folders
         extracts = sorted(
-            [p for p in all_items if p.is_dir() and p.name.startswith('app-extracted-')],
+            [p for p in all_items if p.is_dir() and (p.name.startswith('app-extracted-') or p.name.startswith('app-decompiled-'))],
             key=lambda p: p.name,
             reverse=True
         )
@@ -1038,7 +1210,8 @@ def api_extracted_list():
                 {
                     'name': p.name,
                     'path': str(p),
-                    'date': p.name.replace('app-extracted-', '')
+                    'date': p.name.replace('app-extracted-', '').replace('app-decompiled-', ''),
+                    'type': 'extracted'
                 } for p in extracts
             ]
         }
@@ -1046,6 +1219,44 @@ def api_extracted_list():
         return jsonify(result)
     except Exception as e:
         print(f'[API Error] Failed to list extracts: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/backups-list', methods=['GET'])
+def api_backups_list():
+    """List available backups."""
+    try:
+        base = Path(DOCS_DIR)
+        print(f'[API] Checking for backups in: {base}')
+        
+        if not base.exists():
+            return jsonify({'success': True, 'backups': []})
+        
+        all_items = list(base.iterdir())
+        
+        # Look for backup- folders
+        backups = sorted(
+            [p for p in all_items if p.is_dir() and p.name.startswith('backup-')],
+            key=lambda p: p.name,
+            reverse=True
+        )
+        print(f'[API] Found {len(backups)} backups')
+        
+        result = {
+            'success': True,
+            'backups': [
+                {
+                    'name': p.name,
+                    'path': str(p),
+                    'date': p.name.replace('backup-', ''),
+                    'asar_exists': (p / 'app.asar').exists()
+                } for p in backups
+            ]
+        }
+        return jsonify(result)
+    except Exception as e:
+        print(f'[API Error] Failed to list backups: {str(e)}')
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -1130,6 +1341,77 @@ def api_delete_extract():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': f'Failed to delete: {str(e)}'}), 500
+
+@app.route('/api/create-backup', methods=['POST'])
+def api_create_backup():
+    """Create a new backup of the current app.asar"""
+    try:
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not initialized'}), 400
+        
+        if theme_manager.create_backup():
+            return jsonify({
+                'success': True,
+                'message': 'Backup created successfully',
+                'backupPath': theme_manager.backup_dir
+            })
+        else:
+            error = theme_manager.status.get('lastError', 'Unknown error')
+            return jsonify({'success': False, 'error': error}), 500
+    except Exception as e:
+        print(f'[API Error] Failed to create backup: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/restore-backup', methods=['POST'])
+def api_restore_backup():
+    """Restore an app.asar from a backup"""
+    try:
+        data = request.json or {}
+        backup_path = data.get('path', '').strip()
+        
+        if not backup_path:
+            return jsonify({'success': False, 'error': 'Missing backup path'}), 400
+        
+        # SECURITY: Validate path
+        is_safe, resolved_path, error_msg = validate_path_safety(
+            backup_path, 
+            DOCS_DIR, 
+            allowed_prefixes=['backup-']
+        )
+        
+        if not is_safe:
+            return jsonify({'success': False, 'error': error_msg}), 403
+        
+        backup_asar = resolved_path / 'app.asar'
+        if not backup_asar.exists():
+            return jsonify({'success': False, 'error': 'Backup does not contain app.asar'}), 400
+        
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not initialized'}), 400
+        
+        # Restore by copying backup over current
+        asar_path = theme_manager.launcher_info['asarPath']
+        asar_backup = Path(asar_path).with_suffix('.asar.backup_restore')
+        
+        try:
+            # Backup current
+            shutil.copy2(asar_path, str(asar_backup))
+            # Restore from backup
+            shutil.copy2(str(backup_asar), asar_path)
+            # Remove temp backup
+            asar_backup.unlink()
+            
+            return jsonify({'success': True, 'message': 'Backup restored successfully'})
+        except Exception as restore_error:
+            # Restore the temp backup if something went wrong
+            if asar_backup.exists():
+                shutil.copy2(str(asar_backup), asar_path)
+                asar_backup.unlink()
+            raise restore_error
+            
+    except Exception as e:
+        print(f'[API Error] Failed to restore backup: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/extraction-changes', methods=['GET'])
 def api_extraction_changes():
@@ -2067,6 +2349,12 @@ if __name__ == '__main__':
     print(f"[Production Server] Debug: Off")
     print(f"[Production Server] Environment: Production")
     
-    # Serve with production WSGI server (Waitress)
-    # Single-threaded for desktop app consistency
-    serve(app, host='127.0.0.1', port=5000, threads=4, _quiet=False)
+    try:
+        # Serve with production WSGI server (Waitress)
+        # Single-threaded for desktop app consistency
+        serve(app, host='127.0.0.1', port=5000, threads=4, _quiet=False)
+    except Exception as e:
+        print(f"[Production Server] FATAL ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

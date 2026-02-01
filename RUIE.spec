@@ -13,6 +13,7 @@ a = Analysis(
         ('public', 'public'),
         ('assets', 'assets'),
         ('icon.ico', '.'),
+        ('asar_extractor.py', '.'),
     ],
     hiddenimports=[
         'flask',
@@ -28,6 +29,7 @@ a = Analysis(
         'launcher_detector',
         'color_replacer',
         'media_replacer',
+        'asar_extractor',
         'waitress',
         'werkzeug',
         'jinja2',

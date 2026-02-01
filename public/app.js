@@ -1,6 +1,50 @@
 // Initialize early to check if script is loading
 console.log('[app.js] Script loaded at', new Date().toISOString());
 
+// Function to send debug logs to server
+function sendDebugToServer(message, level = 'INFO') {
+    try {
+        fetch('/api/debug-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, level })
+        }).catch(err => console.error('[sendDebugToServer] fetch error:', err));
+    } catch (err) {
+        console.error('[sendDebugToServer] error:', err);
+    }
+}
+
+// Send initial load message
+sendDebugToServer('app.js loaded successfully');
+
+// Global error handler
+window.addEventListener('error', function(event) {
+    console.error('[GLOBAL ERROR]', event.filename, event.lineno, event.message);
+    sendDebugToServer(`ERROR at ${event.filename}:${event.lineno} - ${event.message}`, 'ERROR');
+    const errorDiv = document.getElementById('error-display') || (function() {
+        const div = document.createElement('div');
+        div.id = 'error-display';
+        div.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 600px; z-index: 999999; border-radius: 5px; max-height: 300px; overflow-y: auto;';
+        document.documentElement.appendChild(div);
+        return div;
+    })();
+    errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\n${event.filename}:${event.lineno} ${event.message}`;
+});
+
+// Global unhandled promise rejection handler  
+window.addEventListener('unhandledrejection', function(event) {
+    console.error('[UNHANDLED REJECTION]', event.reason);
+    sendDebugToServer(`UNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`, 'ERROR');
+    const errorDiv = document.getElementById('error-display') || (function() {
+        const div = document.createElement('div');
+        div.id = 'error-display';
+        div.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 600px; z-index: 999999; border-radius: 5px; max-height: 300px; overflow-y: auto;';
+        document.documentElement.appendChild(div);
+        return div;
+    })();
+    errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\nUNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`;
+});
+
 // Global state
 const state = {
     initialized: false,
@@ -41,6 +85,10 @@ const DOM = {
     backBtn: null,
     nextBtn: null,
     init() {
+        console.log('[DOM.init] Starting DOM initialization, document.readyState:', document.readyState);
+        console.log('[DOM.init] document.body exists:', !!document.body);
+        console.log('[DOM.init] asarPath element found:', !!document.getElementById('asarPath'));
+        
         this.pages = document.querySelectorAll('.page');
         this.stepperSteps = document.querySelectorAll('.stepper-step');
         this.previewFrame = document.getElementById('previewFrame');
@@ -59,6 +107,8 @@ const DOM = {
         this.musicList = document.getElementById('musicList');
         this.mediaAssetPicker = document.getElementById('mediaAssetPicker');
         this.mediaFilter = document.getElementById('mediaFilter');
+
+        console.log('[DOM.init] DOM elements cached - asarPath:', !!this.asarPath, 'initStatus:', !!this.initStatus);
 
         // Sync preview state when any preview iframe loads
         this.previewFrames.forEach((frame) => {
@@ -100,6 +150,15 @@ function navigateToPage(pageNumber) {
 
         // Sync preview state to the active iframe on step change
         sendPreviewStateToFrame(getActivePreviewFrame());
+        
+        // Load ASAR and Backup lists when navigating to step 1
+        if (pageNumber === 1) {
+            setTimeout(() => {
+                console.log('[navigateToPage] Loading ASAR and Backup lists for page 1');
+                loadExtractedASARList().catch(e => console.error('Error loading extracts on page 1:', e));
+                loadBackupsList().catch(e => console.error('Error loading backups on page 1:', e));
+            }, 100);
+        }
         
         // Render color mappings when navigating to colors page
         if (pageNumber === 2) {
@@ -527,12 +586,22 @@ async function detectLauncher(options = {}) {
         
         // Ensure DOM is initialized
         if (!DOM.asarPath) {
+            console.warn('[detectLauncher] DOM.asarPath not found, calling DOM.init()');
             DOM.init();
+            console.log('[detectLauncher] After DOM.init(), DOM.asarPath:', !!DOM.asarPath);
         }
         
+        if (!DOM.asarPath) {
+            throw new Error('CRITICAL: asarPath input element not found in DOM');
+        }
+        
+        console.log('[detectLauncher] About to set DOM.asarPath.value');
         DOM.asarPath.value = data.launcher.asarPath;
+        console.log('[detectLauncher] Value set to:', DOM.asarPath.value);
+        
         // Also set a data attribute so we can verify via HTTP
         DOM.asarPath.setAttribute('data-path-set', 'true');
+        console.log('[detectLauncher] data-path-set attribute added');
         
         // Show success indicator next to path field
         const pathIndicator = document.getElementById('path-success-indicator');
@@ -749,6 +818,228 @@ async function openLatestExtract() {
     } catch (error) {
         showStatus('extract-status', error.message, 'error');
     }
+}
+
+/**
+ * Load and display extracted ASAR folders
+ */
+async function loadExtractedAsars() {
+    const extractsList = document.getElementById('extractsList');
+    if (!extractsList) return;
+    
+    try {
+        const response = await fetch('/api/extracted-list');
+        const data = await response.json();
+        
+        if (!data.success || !data.extracts || data.extracts.length === 0) {
+            extractsList.innerHTML = '<div class="extract-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">No extracted ASAR folders found. Decompile app.asar to get started.</div>';
+            return;
+        }
+        
+        extractsList.innerHTML = '';
+        data.extracts.forEach(extract => {
+            const item = document.createElement('div');
+            item.className = 'extract-item';
+            item.style.cssText = 'background: #2a3a4a; border: 1px solid #3a4a5a; border-radius: 4px; padding: 10px; margin-bottom: 8px; cursor: pointer;';
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1;">
+                        <div style="color: #8db4d0; font-weight: bold; font-size: 0.9em;">${extract.name}</div>
+                        <div style="color: #7a8a9a; font-size: 0.85em;">${extract.date}</div>
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-small" style="padding: 4px 8px; font-size: 0.75em;" onclick="useExtractFolder('${extract.path}')">Use</button>
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75em;" onclick="deleteExtractFolder('${extract.path}')">Delete</button>
+                    </div>
+                </div>
+            `;
+            extractsList.appendChild(item);
+        });
+    } catch (error) {
+        console.error('Error loading extracted folders:', error);
+        extractsList.innerHTML = '<div class="extract-item-empty" style="color: red;">Error loading extracts</div>';
+    }
+}
+
+/**
+ * Load and display backups
+ */
+async function loadBackups() {
+    const backupsList = document.getElementById('backupsList');
+    if (!backupsList) return;
+    
+    try {
+        const response = await fetch('/api/backups-list');
+        const data = await response.json();
+        
+        if (!data.success || !data.backups || data.backups.length === 0) {
+            backupsList.innerHTML = '<div class="backup-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">No backups found. Click "Create New Backup" to get started.</div>';
+            return;
+        }
+        
+        backupsList.innerHTML = '';
+        data.backups.forEach(backup => {
+            const item = document.createElement('div');
+            item.className = 'backup-item';
+            item.style.cssText = 'background: #2a3a4a; border: 1px solid #3a4a5a; border-radius: 4px; padding: 10px; margin-bottom: 8px;';
+            item.innerHTML = `
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div style="flex: 1;">
+                        <div style="color: #8db4d0; font-weight: bold; font-size: 0.9em;">${backup.name}</div>
+                        <div style="color: #7a8a9a; font-size: 0.85em;">${backup.date}</div>
+                        ${backup.asar_exists ? '<div style="color: #7fb3d5; font-size: 0.8em;">✓ Contains app.asar</div>' : '<div style="color: #d07a7a; font-size: 0.8em;">⚠ Missing app.asar</div>'}
+                    </div>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="btn btn-primary" style="padding: 4px 8px; font-size: 0.75em;" onclick="restoreBackup('${backup.path}')">Restore</button>
+                        <button class="btn btn-danger" style="padding: 4px 8px; font-size: 0.75em;" onclick="deleteBackup('${backup.path}')">Delete</button>
+                    </div>
+                </div>
+            `;
+            backupsList.appendChild(item);
+        });
+    } catch (error) {
+        console.error('Error loading backups:', error);
+        backupsList.innerHTML = '<div class="backup-item-empty" style="color: red;">Error loading backups</div>';
+    }
+}
+
+/**
+ * Use an extracted folder
+ */
+async function useExtractFolder(path) {
+    try {
+        const response = await fetch('/api/use-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus('extract-status', '✓ Using selected extraction', 'success');
+            loadExtractedAsars();
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to use extraction'), 'error');
+        }
+    } catch (error) {
+        showStatus('extract-status', 'Error: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Delete an extracted folder
+ */
+async function deleteExtractFolder(path) {
+    if (!confirm('Are you sure you want to delete this extracted folder? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/delete-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus('extract-status', '✓ Extraction deleted', 'success');
+            loadExtractedAsars();
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to delete'), 'error');
+        }
+    } catch (error) {
+        showStatus('extract-status', 'Error: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Create a new backup
+ */
+async function createNewBackup() {
+    try {
+        const response = await fetch('/api/create-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus('extract-status', '✓ Backup created successfully', 'success');
+            loadBackups();
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to create backup'), 'error');
+        }
+    } catch (error) {
+        showStatus('extract-status', 'Error: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Restore a backup
+ */
+async function restoreBackup(path) {
+    if (!confirm('Are you sure you want to restore this backup? This will overwrite the current app.asar.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/restore-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus('extract-status', '✓ Backup restored successfully', 'success');
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to restore backup'), 'error');
+        }
+    } catch (error) {
+        showStatus('extract-status', 'Error: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Delete a backup
+ */
+async function deleteBackup(path) {
+    if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/delete-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showStatus('extract-status', '✓ Backup deleted', 'success');
+            loadBackups();
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to delete backup'), 'error');
+        }
+    } catch (error) {
+        showStatus('extract-status', 'Error: ' + error.message, 'error');
+    }
+}
+
+/**
+ * Load both extracts and backups when initializing
+ */
+async function loadExtracts() {
+    console.log('loadExtracts called');
+    await loadExtractedAsars();
+    await loadBackups();
 }
 
 async function loadExtractedList() {
@@ -3020,82 +3311,236 @@ if (document.readyState === 'loading') {
     startApp();
 }
 
+/**
+ * Open Update Manager window
+ */
+function openUpdateManager() {
+    console.log('[APP] openUpdateManager called');
+    try {
+        fetch('/api/update-manager', {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(r => r.json())
+            .then(data => {
+                console.log('[APP] Update manager data:', data);
+                if (data.success) {
+                    // Create a modal dialog for update manager
+                    const modalHtml = `
+                        <div id="update-modal" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; align-items: center; justify-content: center;">
+                            <div style="background: #0a1d29; border: 2px solid #00d4ff; border-radius: 8px; padding: 30px; max-width: 600px; max-height: 80vh; overflow-y: auto; color: #c0c8d0; font-family: Segoe UI, Arial, sans-serif;">
+                                <h2 style="color: #00d4ff; margin-top: 0; margin-bottom: 20px;">⚙️ Update Manager</h2>
+                                
+                                <div style="background: #1a2a3a; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                                    <h3 style="color: #8db4d0; margin: 0 0 10px 0;">Current Version</h3>
+                                    <p style="margin: 0; font-size: 1.1em;">${data.current_version || 'Unknown'}</p>
+                                </div>
+                                
+                                <div style="background: #1a2a3a; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                                    <h3 style="color: #8db4d0; margin: 0 0 10px 0;">Latest Available Version</h3>
+                                    <p style="margin: 0; font-size: 1.1em;">${data.latest_version || 'Checking...'}</p>
+                                    ${data.update_available ? '<p style="color: #64c864; margin: 10px 0 0 0;">✓ Update available!</p>' : '<p style="color: #7a8a9a; margin: 10px 0 0 0;">You are up to date.</p>'}
+                                </div>
+                                
+                                <div style="background: #1a2a3a; padding: 15px; border-radius: 5px; margin-bottom: 20px;">
+                                    <h3 style="color: #8db4d0; margin: 0 0 10px 0;">Application Info</h3>
+                                    <p style="margin: 5px 0;">Build: ${data.build_type || 'Unknown'}</p>
+                                    <p style="margin: 5px 0;">Python: ${data.python_version || 'Unknown'}</p>
+                                    <p style="margin: 5px 0;">Platform: Windows</p>
+                                </div>
+                                
+                                <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                                    <button onclick="closeUpdateModal()" class="btn btn-secondary" style="padding: 8px 16px;">Close</button>
+                                    ${data.update_available ? '<button onclick="downloadUpdate()" class="btn btn-primary" style="padding: 8px 16px;">📥 Download Update</button>' : ''}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Remove existing modal if any
+                    const existing = document.getElementById('update-modal');
+                    if (existing) existing.remove();
+                    
+                    // Add modal to body
+                    document.body.insertAdjacentHTML('beforeend', modalHtml);
+                } else {
+                    alert('Error loading update manager: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('[APP] Update manager error:', err);
+                alert('Error: ' + err.message);
+            });
+    } catch (err) {
+        console.error('[APP] openUpdateManager error:', err);
+        alert('Error: ' + err.message);
+    }
+}
+
+/**
+ * Close Update Manager modal
+ */
+function closeUpdateModal() {
+    const modal = document.getElementById('update-modal');
+    if (modal) modal.remove();
+}
+
+/**
+ * Download and install update
+ */
+function downloadUpdate() {
+    console.log('[APP] downloadUpdate called');
+    try {
+        fetch('/api/download-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    alert('✓ Update downloaded! Please restart the application.');
+                    closeUpdateModal();
+                } else {
+                    alert('Error downloading update: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => alert('Error: ' + err.message));
+    } catch (err) {
+        console.error('[APP] downloadUpdate error:', err);
+        alert('Error: ' + err.message);
+    }
+}
+
 async function startApp() {
     // Safety check - ensure we only run once
+    const msg1 = '[startApp] ***** STARTING APPLICATION *****';
+    console.log(msg1);
+    sendDebugToServer(msg1);
     console.log('[startApp] Called, window.appStarted =', window.appStarted);
+    sendDebugToServer(`window.appStarted = ${window.appStarted}`);
+    
     if (window.appStarted) {
         console.log('[startApp] Already started, returning');
+        sendDebugToServer('startApp already started, returning');
         return;
     }
     
     console.log('[startApp] Setting window.appStarted = true');
+    sendDebugToServer('Setting window.appStarted = true');
     window.appStarted = true;
     
-    // Initialize DOM cache first for performance
-    console.log('[startApp] Starting initialization');
-    DOM.init();
-    console.log('[startApp] DOM initialized, asarPath element:', DOM.asarPath);
+    // Write a visible indicator on the page that startApp is running
+    if (document.body) {
+        const startupIndicator = document.createElement('div');
+        startupIndicator.id = 'startup-indicator';
+        startupIndicator.style.cssText = 'position: fixed; top: 40px; left: 10px; background: blue; color: white; padding: 10px; font-family: monospace; z-index: 99999; border-radius: 5px;';
+        startupIndicator.innerHTML = 'startApp is running...';
+        document.body.appendChild(startupIndicator);
+        console.log('[startApp] Added visible startup indicator');
+        sendDebugToServer('Added visible startup indicator');
+    } else {
+        console.error('[startApp] document.body does not exist');
+        sendDebugToServer('ERROR: document.body does not exist', 'ERROR');
+    }
     
-    // Write debug info to the page itself
-    console.log('[startApp] Creating debug element');
-    const debugEl = document.createElement('div');
-    debugEl.id = 'debug-info';
-    debugEl.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; max-width: 400px; z-index: 9999; white-space: pre-wrap;';
-    debugEl.innerHTML = '[INIT] Starting...';
-    console.log('[startApp] Appending debug element to document.body');
-    document.body.appendChild(debugEl);
-    console.log('[startApp] Debug element appended');
-    const appendDebug = (msg) => { debugEl.innerHTML += '\n[' + new Date().toLocaleTimeString() + '] ' + msg; debugEl.scrollTop = debugEl.scrollHeight; };
+    try {
+        // Initialize DOM cache first for performance
+        console.log('[startApp] Starting initialization');
+        DOM.init();
+        console.log('[startApp] DOM initialized, asarPath element:', DOM.asarPath);
+        
+        // Ensure Update Manager button is visible and functional
+        console.log('[startApp] Checking Update Manager button...');
+        const updateBtn = document.getElementById('update-manager-btn');
+        const updateWrapper = document.getElementById('update-manager-wrapper');
+        if (updateBtn) {
+            console.log('[startApp] ✓ Update Manager button found');
+            updateBtn.style.display = 'block';
+            updateBtn.style.visibility = 'visible';
+            updateBtn.style.opacity = '1';
+            if (updateWrapper) {
+                updateWrapper.style.display = 'flex';
+                updateWrapper.style.visibility = 'visible';
+                updateWrapper.style.opacity = '1';
+            }
+        } else {
+            console.error('[startApp] ✗ Update Manager button NOT found');
+            sendDebugToServer('ERROR: Update Manager button not found in DOM', 'ERROR');
+        }
+        
+        // Write debug info to the page itself
+        console.log('[startApp] Creating debug element');
+        const debugEl = document.createElement('div');
+        debugEl.id = 'debug-info';
+        debugEl.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; max-width: 400px; z-index: 9999; white-space: pre-wrap;';
+        debugEl.innerHTML = '[INIT] Starting...';
+        console.log('[startApp] Appending debug element to document.body');
+        document.body.appendChild(debugEl);
+        console.log('[startApp] Debug element appended');
+        const appendDebug = (msg) => { debugEl.innerHTML += '\n[' + new Date().toLocaleTimeString() + '] ' + msg; debugEl.scrollTop = debugEl.scrollHeight; };
 
-    appendDebug('DOM initialized');
-    console.log('[window.load] Loading preset files...');
-    await loadPresetFiles();
-    appendDebug('Presets loaded');
-    console.log('[window.load] Preset files loaded');
-    
-    // Initialize page navigation - start on initialization page (step 1)
-    console.log('[window.load] Navigating to page 1...');
-    navigateToPage(1);
-    appendDebug('Page navigation done');
-    console.log('[window.load] Page navigation complete');
-    
-    // Detect and initialize launcher FIRST
-    console.log('[window.load] Calling detectLauncher...');
-    appendDebug('Calling detectLauncher...');
-    await detectLauncher({ autoInit: true, silentFailure: false });
-    appendDebug('detectLauncher complete');
-    appendDebug('asarPath value: ' + (DOM.asarPath?.value || 'EMPTY'));
-    console.log('[window.load] detectLauncher complete, asarPath value:', DOM.asarPath?.value);
-    
-    // Load initial backups list (only after launcher is detected)
-    try {
-        console.log('[window.load] Loading backups...');
-        appendDebug('Loading backups...');
-        await loadBackupsList();
-        appendDebug('Backups loaded');
-        console.log('[window.load] Backups loaded');
-    } catch (e) {
-        appendDebug('Backup error: ' + e.message);
-        console.warn('[window.load] Error loading backups:', e);
+        appendDebug('DOM initialized');
+        console.log('[window.load] Loading preset files...');
+        await loadPresetFiles();
+        appendDebug('Presets loaded');
+        console.log('[window.load] Preset files loaded');
+        
+        // Initialize page navigation - start on initialization page (step 1)
+        console.log('[window.load] Navigating to page 1...');
+        navigateToPage(1);
+        appendDebug('Page navigation done');
+        console.log('[window.load] Page navigation complete');
+        
+        // Detect and initialize launcher FIRST
+        console.log('[window.load] Calling detectLauncher...');
+        appendDebug('Calling detectLauncher...');
+        await detectLauncher({ autoInit: true, silentFailure: false });
+        appendDebug('detectLauncher complete');
+        appendDebug('asarPath value: ' + (DOM.asarPath?.value || 'EMPTY'));
+        console.log('[window.load] detectLauncher complete, asarPath value:', DOM.asarPath?.value);
+        
+        // Load initial backups list (only after launcher is detected)
+        try {
+            console.log('[window.load] Loading backups...');
+            appendDebug('Loading backups...');
+            await loadBackupsList();
+            appendDebug('Backups loaded');
+            console.log('[window.load] Backups loaded');
+        } catch (e) {
+            appendDebug('Backup error: ' + e.message);
+            console.warn('[window.load] Error loading backups:', e);
+        }
+        
+        // Load extracted ASAR list (only after launcher is detected)
+        try {
+            console.log('[window.load] Loading extracted ASARs...');
+            appendDebug('Loading extracted ASARs...');
+            await loadExtractedASARList();
+            appendDebug('Extracted ASARs loaded');
+            console.log('[window.load] Extracted ASARs loaded');
+        } catch (e) {
+            appendDebug('Extracted ASAR error: ' + e.message);
+            console.warn('[window.load] Error loading extracted ASARs:', e);
+        }
+        
+        // Check for updates asynchronously (non-blocking)
+        setTimeout(() => {
+            checkForUpdates();
+        }, 2000); // Wait 2 seconds after app loads
+        
+        // Check for updates every 24 hours
+        setInterval(checkForUpdates, 24 * 60 * 60 * 1000);
+        
+        appendDebug('✓ Application fully initialized');
+        console.log('[startApp] Application fully initialized successfully');
+        
+    } catch (error) {
+        console.error('[startApp] FATAL ERROR:', error);
+        console.error('[startApp] Stack:', error.stack);
+        // Try to display error in debug element if it exists
+        if (document.getElementById('debug-info')) {
+            document.getElementById('debug-info').innerHTML = 'CRITICAL ERROR: ' + error.message;
+        }
+        throw error;  // Re-throw so caller knows there was an error
     }
-    
-    // Load extracted ASAR list (only after launcher is detected)
-    try {
-        console.log('[window.load] Loading extracted ASARs...');
-        appendDebug('Loading extracted ASARs...');
-        await loadExtractedASARList();
-        appendDebug('Extracted ASARs loaded');
-        console.log('[window.load] Extracted ASARs loaded');
-    } catch (e) {
-        appendDebug('Extracted ASAR error: ' + e.message);
-        console.warn('[window.load] Error loading extracted ASARs:', e);
-    }
-    
-    // Check for updates asynchronously (non-blocking)
-    setTimeout(() => {
-        checkForUpdates();
-    }, 2000); // Wait 2 seconds after app loads
-    
-    // Check for updates every 24 hours
-    setInterval(checkForUpdates, 24 * 60 * 60 * 1000);
 }
