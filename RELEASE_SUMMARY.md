@@ -1,15 +1,28 @@
 # RUIE v0.2 Alpha - Release Summary
 
-**Release Date**: February 1, 2026 (Build v2.1 - Startup Progress UI)  
+**Release Date**: February 1, 2026 (Build v2.1.1 - Loading Screen Polish)  
 **Version**: 0.2 Alpha  
 **Status**: ✅ **PRODUCTION-READY & FULLY TESTED**
-**Build Status**: ✅ **Startup Progress UI + Hidden Imports Fixed & Verified**
+**Build Status**: ✅ **Polished Loading Screen + Startup Progress UI + Hidden Imports Fixed & Verified**
 
 ---
 
 ## 🎉 Release Highlights
 
-### ✅ Build v2.1: Enhanced Startup Progress UI (Latest)
+### ✅ Build v2.1.1: Loading Screen UI Polish (Latest)
+- **Issue Addressed**: Loading indicator icons overlapping with status text
+- **Solution**: Refined CSS spacing, alignment, and icon sizing for clean appearance
+- **Improvements**:
+  - Icons increased to 16px with consistent centering
+  - Text gap increased to 10px for clear separation
+  - Vertical spacing improved with 8px margins
+  - Left-aligned layout instead of centered for cleaner appearance
+  - Flex-based layout with `flex-shrink: 0` to prevent icon squishing
+  - Container padding for professional breathing room
+- **Result**: Clean, professional loading screen with zero overlapping elements
+- **Implementation**: CSS refinements in launcher.py
+
+### ✅ Build v2.1: Enhanced Startup Progress UI
 - **Issue Addressed**: Portable app appeared frozen on static "Starting" screen
 - **Solution**: Professional progress UI with progress bar, percentage, status messages, and step indicators
 - **Features**:

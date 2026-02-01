@@ -21,31 +21,39 @@ The startup experience has been significantly enhanced with a visual progress in
 
 ✅ **Progress Bar**
 - Visual percentage fill (0-100%)
-- Smooth animations
-- Color-coded feedback (cyan blue gradient)
+- Smooth animations with color gradient (cyan → blue)
+- Glow effect with box shadow
+- Clear visual feedback of initialization progress
 
 ✅ **Percentage Display**
-- Large, clear percentage number
-- Updates every second during initialization
+- Large, clear cyan-colored percentage number
+- Updates in real-time during initialization
 - Shows progress at a glance
+- Always visible and readable
 
 ✅ **Status Messages**
 - Main status text updates with current operation
 - Examples: "Loading Python dependencies...", "Starting Flask server...", "Initializing user interface..."
+- Additional context during wait phases: "Waiting for server... (5s)"
+- Clear communication of what's happening
 
 ✅ **Step Indicators**
 - 3-step visual progression:
   1. Loading Python dependencies (spinning indicator)
   2. Starting Flask server (in progress)
   3. Initializing user interface (pending)
-- Each step shows completion with checkmark when finished
-- Current step highlighted in cyan
+- Each step shows completion with checkmark (✓) when finished
+- Current step highlighted in cyan with spinning animation
+- Pending steps shown with empty circle (○)
+- Properly spaced to prevent visual overlap
 
 ✅ **Professional Design**
 - Matches RUIE's sci-fi aesthetic
-- Gradient background (dark sci-fi theme)
-- Smooth animations (progress bar, spinner)
-- Footer text: "Do not close this window"
+- Gradient background (#0a0e27 to #0a1d29 dark sci-fi theme)
+- Smooth animations (0.3s progress bar, 0.8s spinner rotation)
+- Properly aligned and spaced indicators and text
+- Responsive padding and margins for clean appearance
+- Footer text: "v0.2 Alpha • Do not close this window"
 
 ---
 
@@ -146,21 +154,30 @@ launcher.py (Python)
 ## Visual Design Details
 
 ### Color Scheme
-- **Progress Bar**: Cyan gradient (#00d4ff → #00a8cc)
-- **Text**: Light gray (#c0c8d0) with cyan highlights
+- **Progress Bar**: Cyan gradient (#00d4ff → #00a8cc) with 0.5 glow shadow
+- **Active Text**: Bright cyan (#00d4ff) for active elements
+- **Inactive Text**: Light gray (#c0c8d0) for normal text, darker (#7a8a9a) for pending items
 - **Background**: Dark sci-fi gradient (#0a0e27 → #0a1d29)
-- **Spinner**: Rotating cyan border with glow effect
+- **Spinner**: Rotating cyan border (2px) with rgba background
+- **Icons**: Properly sized (16px) with consistent alignment
 
 ### Animation Timing
-- **Progress Bar**: 0.3s smooth transition
-- **Spinner**: 0.8s continuous rotation
-- **Status Updates**: Instant DOM updates with CSS animations
+- **Progress Bar**: 0.3s smooth width transition
+- **Spinner**: 0.8s continuous rotation (360deg)
+- **Status Updates**: Instant DOM updates with smooth CSS transitions
 
 ### Responsive Design
-- **Logo**: Large, bold "◇ RUIE ◇" with text shadow
-- **Progress Container**: Centered, max-width 500px
-- **Status Items**: Left-aligned with icons and descriptions
-- **Footer**: Subtle "Do not close this window" reminder
+- **Logo**: Large, bold "◇ RUIE ◇" (3em) with cyan text shadow
+- **Title**: "RSI Launcher UI Editor" (1.8em) with letter spacing
+- **Progress Container**: Centered, max-width 500px with 40px padding
+- **Status Items**: Left-aligned with:
+  - 16px × 16px fixed-size icons (flex-shrink: 0 to prevent squishing)
+  - 10px gap between icon and text
+  - 8px vertical margin between items
+  - 24px minimum height for consistent line height
+  - 10px horizontal padding on container
+- **Footer**: Subtle "v0.2 Alpha • Do not close this window" text
+- **Text Alignment**: Left-aligned status items (not centered) for clean appearance
 
 ---
 

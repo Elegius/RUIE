@@ -6,9 +6,35 @@
     <title>RUIE</title>
     <link rel="icon" type="image/x-icon" href="/icon.ico">
     <link rel="stylesheet" href="styles.css?v=20260201d">
-    <script src="app.js?v=20260201" defer></script>
+    <script src="app.js?v=20260201"></script>
 </head>
 <body>
+    <script>
+    window.inlineScriptRan = true;
+    console.log('[INLINE] JavaScript is running');
+    // Try to access app.js
+    setTimeout(() => {
+        let status = 'app: ';
+        if (typeof state !== 'undefined') {
+            status += '✓ | ';
+        } else {
+            status += '✗ | ';
+        }
+        status += 'startApp: ';
+        if (window.appStarted) {
+            status += '✓ | ';
+        } else {
+            status += '✗ | ';
+        }
+        status += 'DOM: ';
+        if (window.DOM && window.DOM.asarPath) {
+            status += '✓ asarPath=' + window.DOM.asarPath.value;
+        } else {
+            status += '✗ asarPath=' + (window.DOM ? 'exists' : 'no DOM');
+        }
+        document.body.innerHTML = '<div style="color: #0f0; background: #000; padding: 20px; font-family: monospace; position: fixed; top: 0; left: 0; right: 0; z-index: 99999; white-space: pre-wrap; word-wrap: break-word;">' + status + '</div>' + document.body.innerHTML;
+    }, 500);
+    </script>
     <div class="container">
         <!-- Minimal Header -->
         <header class="header">
@@ -319,7 +345,5 @@
             </div>
         </div>
     </div>
-
-    <script src="app.js?v=20260201g"></script>
 </body>
 </html>

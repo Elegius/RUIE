@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, QTimer
 from PyQt5.QtGui import QIcon
+import waitress  # Required for production WSGI server - must be at module level for PyInstaller
 
 # Version info
 APP_VERSION = "0.2 Alpha"
@@ -212,11 +213,13 @@ class LauncherApp(QMainWindow):
                 .status-item {
                     font-size: 0.85em;
                     color: #7a8a9a;
-                    margin-top: 4px;
+                    margin-top: 8px;
                     display: flex;
                     align-items: center;
-                    justify-content: center;
-                    gap: 8px;
+                    justify-content: flex-start;
+                    gap: 10px;
+                    padding: 6px 0;
+                    min-height: 24px;
                 }
                 
                 .status-item.active {
@@ -225,9 +228,12 @@ class LauncherApp(QMainWindow):
                 }
                 
                 .status-icon {
-                    display: inline-block;
-                    width: 12px;
-                    height: 12px;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 16px;
+                    height: 16px;
+                    flex-shrink: 0;
                 }
                 
                 .status-icon.complete {
@@ -267,7 +273,7 @@ class LauncherApp(QMainWindow):
                     </div>
                     <div class="progress-percentage" id="percentage">0%</div>
                     
-                    <div style="margin-top: 25px; text-align: left;">
+                    <div style="margin-top: 25px; text-align: left; padding: 0 10px;">
                         <div class="status-item" id="status1">
                             <span class="status-icon"><span class="spinner" id="spinner1"></span></span>
                             <span>Loading Python dependencies...</span>
@@ -357,20 +363,41 @@ class LauncherApp(QMainWindow):
                             os.chdir(sys._MEIPASS)
                             logger.info(f'Working directory set to: {sys._MEIPASS}')
                         
+                        # Add the frozen app path to sys.path to ensure imports work
+                        if sys._MEIPASS not in sys.path:
+                            sys.path.insert(0, sys._MEIPASS)
+                        
                         # Import and run server with production WSGI
+                        logger.info('Attempting to import server module...')
                         import server
+                        logger.info('Server module imported successfully')
+                        
+                        logger.info('Attempting to import waitress...')
                         from waitress import serve
-                        logger.info('Server module imported successfully - using Waitress WSGI')
+                        logger.info('Waitress WSGI server imported successfully')
+                        
                         logger.info(f'Production server starting on port {self.port}')
                         self.update_loading_progress(50, 2, 'Initializing Flask application...')
-                        serve(server.app, host='127.0.0.1', port=self.port, threads=4)
+                        
+                        # Start the server with timeout configuration
+                        logger.info('Starting Waitress server...')
+                        serve(server.app, host='127.0.0.1', port=self.port, threads=4, _quiet=False)
+                    except ImportError as e:
+                        logger.error(f'Import error - missing module: {e}', exc_info=True)
+                        logger.error(f'sys.path: {sys.path}')
+                        logger.error(f'sys._MEIPASS: {getattr(sys, "_MEIPASS", "NOT SET")}')
+                        logger.error('CRITICAL: Server thread failed at import stage')
                     except Exception as e:
-                        logger.error(f'Server error: {e}', exc_info=True)
+                        logger.error(f'Server thread exception: {e}', exc_info=True)
+                        logger.error('CRITICAL: Server thread crashed with exception')
                 
                 self.server_thread = threading.Thread(target=run_flask, daemon=True)
                 self.server_thread.start()
                 logger.info('Server thread started')
                 self.update_loading_progress(45, 2, 'Server starting...')
+                
+                # Give the thread a moment to start
+                time.sleep(0.5)
                 
             else:
                 # Running from source - start Flask as subprocess with Waitress
@@ -465,20 +492,50 @@ class LauncherApp(QMainWindow):
             
             # Update progress based on attempts (0-35 attempts = 0-70% progress)
             progress = min(45 + (self.check_attempts * 0.7), 70)
-            self.update_loading_progress(progress, 2, f'Waiting for server... ({self.check_attempts}s)')
+            elapsed_text = f'({self.check_attempts}s)'
+            self.update_loading_progress(progress, 2, f'Waiting for server... {elapsed_text}')
             
-            logger.debug(f'Waiting for server to be ready... ({self.check_attempts}s)')
+            logger.debug(f'Waiting for server to be ready... attempt {self.check_attempts}/35')
             
-            # Timeout after 35 seconds
+            # Timeout after 35 seconds with detailed error logging
             if self.check_attempts > 35:
-                logger.error('Server did not respond within 35 seconds')
+                logger.error(f'Server did not respond within 35 seconds ({self.check_attempts} attempts)')
+                logger.error(f'Checking if server process is running...')
+                
+                # Log server thread status
+                if hasattr(self, 'server_thread') and self.server_thread:
+                    logger.error(f'Server thread alive: {self.server_thread.is_alive()}')
+                
+                # Try one more connection attempt with extended timeout
+                try:
+                    logger.info('Attempting final connection with 5-second timeout...')
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock.settimeout(5)
+                    result = sock.connect_ex(('127.0.0.1', self.port))
+                    sock.close()
+                    if result == 0:
+                        logger.info('Connection successful on final attempt!')
+                        self.update_loading_progress(75, 3, 'Loading user interface...')
+                        time.sleep(0.5)
+                        self.load_ui()
+                        return
+                except Exception as e:
+                    logger.error(f'Final connection attempt failed: {e}')
+                
+                # Show detailed error message
                 self.show_error(
                     'Server Startup Timeout<br><br>'
-                    'The application server failed to start within the expected time.<br><br>'
-                    'Try: Restart the application or check the RUIE-debug.log file for errors.'
+                    'The application server failed to start within 35 seconds.<br><br>'
+                    '<b>Solutions:</b><br>'
+                    '• Restart the application<br>'
+                    '• Check RUIE-debug.log in your Documents folder<br>'
+                    '• Close other applications using port 5000<br>'
+                    '• Try running as Administrator<br><br>'
+                    'If the problem persists, your system may be slow or have resource constraints.'
                 )
                 return
             
+            # Schedule next check
             QTimer.singleShot(1000, self.check_and_load_ui)
     
     def load_ui(self):

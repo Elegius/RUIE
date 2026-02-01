@@ -878,25 +878,34 @@ def api_launcher_asset():
 @app.route('/api/init', methods=['GET', 'POST'])
 def api_init():
     """Initialize and detect launcher."""
-    print("[api_init] Calling theme_manager.init()")
-    success = theme_manager.init()
-    print(f"[api_init] theme_manager.init() returned: {success}")
-    print(f"[api_init] theme_manager.launcher_info: {theme_manager.launcher_info}")
-    
-    if success:
-        return jsonify({
-            'success': True,
-            'launcher': theme_manager.launcher_info
-        })
-    else:
+    try:
+        # Call LauncherDetector directly to detect
+        launcher_info = LauncherDetector.detect()
+        
+        if launcher_info:
+            # Update theme_manager's launcher_info as well
+            theme_manager.launcher_info = launcher_info
+            return jsonify({
+                'success': True,
+                'launcher': launcher_info
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'RSI Launcher not found'
+            }), 404
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
-            'error': 'RSI Launcher not found'
-        }), 404
+            'error': str(e)
+        }), 500
 
 @app.route('/api/detect-launcher', methods=['GET', 'POST'])
 def api_detect_launcher():
     """Alias for /api/init"""
+    print("[SERVER] /api/detect-launcher endpoint called")
     return api_init()
 
 @app.route('/api/launcher-status', methods=['GET', 'POST'])

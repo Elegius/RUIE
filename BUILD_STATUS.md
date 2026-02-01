@@ -1,5 +1,65 @@
 # RUIE Build System - Production Ready ✅
 
+## Build v2.1.2 - Server Connection Diagnostics Enhancement (Feb 1, 2026)
+
+### 🎯 Critical Fix: Waitress Bundling & Enhanced Server Startup (COMPLETE)
+**Problem**: Portable exe times out when connecting to Flask server in frozen mode  
+**Root Causes**: 
+1. Missing sys.path configuration for frozen mode
+2. Insufficient error logging
+3. No timeout retry logic
+4. **Waitress module not bundled by PyInstaller (despite being in hiddenimports)**
+
+**Solution**: Enhanced module loading, detailed diagnostics, final connection attempt, AND forced waitress bundling via module-level import  
+**Status**: ✅ **BUILD COMPLETE - FULLY TESTED AND VERIFIED**
+
+#### What's Fixed:
+- **sys.path Configuration**: Added explicit sys.path setup for frozen mode to ensure imports work
+- **Enhanced Import Logging**: Separate try/catch for server and waitress imports with detailed error info
+- **Debug Information**: Logs sys.path and _MEIPASS values when import fails
+- **Connection Retry**: Added final 5-second timeout attempt before giving up
+- **Better Error Messages**: Detailed troubleshooting suggestions in timeout error dialog
+- **Thread Initialization**: Added 0.5s delay after thread start to allow server startup
+- **Thread Status Logging**: Logs whether server thread is alive during timeout
+- **CRITICAL:** Added `import waitress` at module-level in launcher.py to force PyInstaller bundling
+- **Dependencies**: Updated requirements-build.txt to include `waitress>=2.1.0`
+
+#### Test Results:
+✅ Portable exe built successfully (5.97 MB)  
+✅ Server imports waitress successfully  
+✅ Server starts on port 5000 without timeout  
+✅ UI loads from server successfully  
+✅ Full startup sequence completes without errors  
+✅ Debug log shows: "Waitress WSGI server imported successfully", "Serving on http://127.0.0.1:5000", "Loading UI from http://127.0.0.1:5000"
+
+#### Files Updated:
+- `launcher.py` - Enhanced `run_flask()` with sys.path config, better error handling, **module-level waitress import**
+- `launcher.py` - Enhanced `check_and_load_ui()` with retry logic and detailed error messages
+- `KNOWN_ISSUES.md` - Updated server connection section with complete fix documentation
+- `requirements-build.txt` - Added `waitress>=2.1.0` dependency
+
+---
+
+## Build v2.1.1 - Loading Screen UI Polish (Feb 1, 2026)
+
+### 🎯 Polish Enhancement: Improved Loading Screen Layout
+**Problem**: Loading indicator icons were overlapping with status text  
+**Solution**: Refined CSS spacing and alignment for clean, professional appearance  
+**Status**: ✅ Successfully polished
+
+#### What's Improved:
+- **Icon Sizing**: Increased from 12px to 16px with proper centering
+- **Text Spacing**: Gap between icon and text increased from 8px to 10px
+- **Vertical Spacing**: Status item margins increased from 4px to 8px
+- **Alignment**: Changed from center-aligned to left-aligned for cleaner appearance
+- **Icon Container**: Changed to flex-based layout with `flex-shrink: 0` to prevent squishing
+- **Overall Result**: Clean, professional loading screen with zero overlapping elements
+
+#### Files Updated:
+- `launcher.py` - Enhanced CSS in loading screen HTML with improved spacing and flex properties
+
+---
+
 ## Build v2.1 - Enhanced Startup Progress UI (Feb 1, 2026)
 
 ### 🎯 Major Enhancement: Visual Startup Feedback
@@ -37,7 +97,15 @@
 5. ✅ **Pascal code compilation errors** - Removed problematic Pascal procedure
 6. ✅ **Portable exe double-launch issue** - Fixed admin privilege re-execution logic
 
-### Files Updated (Build v2.1 + v2):
+### Files Updated (Build v2.1.2 + v2.1.1 + v2.1 + v2):
+**Build v2.1.2 (Server Connection Diagnostics)**:
+- `launcher.py` - Enhanced server startup with better error handling
+- `launcher.py` - Improved timeout logic with final connection retry
+- `KNOWN_ISSUES.md` - Documented server connection improvements
+
+**Build v2.1.1 (Loading Screen Polish)**:
+- `launcher.py` - Refined CSS spacing and alignment in loading screen
+
 **Build v2.1 (Startup Progress UI)**:
 - `launcher.py` - Enhanced loading screen (150+ lines HTML/CSS/JS, `update_loading_progress()` method)
 - `STARTUP_PROGRESS_UI.md` - Complete documentation of new startup feature

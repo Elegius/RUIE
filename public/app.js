@@ -463,13 +463,38 @@ function handleAsarFileSelection(event) {
  */
 function browseForAsar() {
     console.log('[browseForAsar] Opening file picker');
-    const fileInput = document.getElementById('asarFileInput');
-    if (fileInput) {
-        fileInput.click();
-    } else {
-        // Fallback if file input doesn't exist
-        showStatus('init-status', 'File picker not available. Enter path manually or use Auto-Detect.', 'warning');
-    }
+    showStatus('init-status', 'Opening file browser...', 'info');
+    
+    // Use API endpoint for file picker dialog (works better in frozen PyQt5 mode)
+    fetch('/api/browse-for-asar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.path) {
+            console.log('[browseForAsar] Selected path:', data.path);
+            DOM.asarPath.value = data.path;
+            
+            // Show success indicator
+            const pathIndicator = document.getElementById('path-success-indicator');
+            if (pathIndicator) {
+                pathIndicator.style.display = 'block';
+            }
+            
+            // Auto-initialize after path is selected
+            showStatus('init-status', 'Initializing...', 'info');
+            setTimeout(() => initSession(), 100);
+        } else {
+            // User cancelled or no file selected
+            console.log('[browseForAsar] No file selected or cancelled');
+            showStatus('init-status', 'No file selected', 'warning');
+        }
+    })
+    .catch(error => {
+        console.error('[browseForAsar] Error:', error);
+        showStatus('init-status', 'Error opening file browser: ' + error.message, 'error');
+    });
 }
 
 /**
@@ -506,6 +531,8 @@ async function detectLauncher(options = {}) {
         }
         
         DOM.asarPath.value = data.launcher.asarPath;
+        // Also set a data attribute so we can verify via HTTP
+        DOM.asarPath.setAttribute('data-path-set', 'true');
         
         // Show success indicator next to path field
         const pathIndicator = document.getElementById('path-success-indicator');
@@ -513,16 +540,14 @@ async function detectLauncher(options = {}) {
             pathIndicator.style.display = 'block';
         }
         
-        // Clear status message - the green checkmark is sufficient feedback
-        const statusEl = document.getElementById('init-status');
-        if (statusEl) {
-            statusEl.textContent = '';
-            statusEl.style.display = 'none';
+        // Show success message and green indicator
+        showStatus('init-status', '✓ Launcher detected', 'success');
+        
+        // If autoInit is true, initialize session after showing the path
+        if (autoInit) {
+            console.log('[detectLauncher] Auto-initializing session');
+            setTimeout(() => initSession(), 500);
         }
-
-        // Auto-initialize after path is detected
-        console.log('[detectLauncher] Auto-initializing session');
-        await initSession();
 
     } catch (error) {
         console.error('[detectLauncher] Error:', error.message);
@@ -591,13 +616,6 @@ async function initSession() {
             initBtn.style.color = '#64c864';
             initBtn.style.boxShadow = '0 0 15px rgba(100, 200, 100, 0.4)';
             initBtn.innerHTML = '✓';
-        }
-        
-        // Clear status message - the green checkmark is sufficient feedback
-        const statusEl = document.getElementById('init-status');
-        if (statusEl) {
-            statusEl.textContent = '';
-            statusEl.style.display = 'none';
         }
         
         // Load extracted list but don't auto-navigate
@@ -2989,22 +3007,89 @@ function showUpdateNotification(latestVersion, releaseUrl, releaseNotes) {
     `;
 }
 
-window.addEventListener('load', async () => {
-    // Initialize DOM cache first for performance
-    DOM.init();
+window.addEventListener('load', () => { console.log('[EVENT] window load event fired'); startApp(); });
+document.addEventListener('DOMContentLoaded', () => { console.log('[EVENT] DOMContentLoaded event fired'); startApp(); });
 
+// Also run immediately if DOM is already ready
+if (document.readyState === 'loading') {
+    // DOM is still loading, wait for DOMContentLoaded
+    console.log('[app.js] DOM still loading, waiting for DOMContentLoaded');
+} else {
+    // DOM is already loaded, run immediately
+    console.log('[app.js] DOM already loaded, running immediately');
+    startApp();
+}
+
+async function startApp() {
+    // Safety check - ensure we only run once
+    console.log('[startApp] Called, window.appStarted =', window.appStarted);
+    if (window.appStarted) {
+        console.log('[startApp] Already started, returning');
+        return;
+    }
+    
+    console.log('[startApp] Setting window.appStarted = true');
+    window.appStarted = true;
+    
+    // Initialize DOM cache first for performance
+    console.log('[startApp] Starting initialization');
+    DOM.init();
+    console.log('[startApp] DOM initialized, asarPath element:', DOM.asarPath);
+    
+    // Write debug info to the page itself
+    console.log('[startApp] Creating debug element');
+    const debugEl = document.createElement('div');
+    debugEl.id = 'debug-info';
+    debugEl.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; max-width: 400px; z-index: 9999; white-space: pre-wrap;';
+    debugEl.innerHTML = '[INIT] Starting...';
+    console.log('[startApp] Appending debug element to document.body');
+    document.body.appendChild(debugEl);
+    console.log('[startApp] Debug element appended');
+    const appendDebug = (msg) => { debugEl.innerHTML += '\n[' + new Date().toLocaleTimeString() + '] ' + msg; debugEl.scrollTop = debugEl.scrollHeight; };
+
+    appendDebug('DOM initialized');
+    console.log('[window.load] Loading preset files...');
     await loadPresetFiles();
+    appendDebug('Presets loaded');
+    console.log('[window.load] Preset files loaded');
     
     // Initialize page navigation - start on initialization page (step 1)
+    console.log('[window.load] Navigating to page 1...');
     navigateToPage(1);
+    appendDebug('Page navigation done');
+    console.log('[window.load] Page navigation complete');
     
-    // Load initial backups list
-    await loadBackupsList();
+    // Detect and initialize launcher FIRST
+    console.log('[window.load] Calling detectLauncher...');
+    appendDebug('Calling detectLauncher...');
+    await detectLauncher({ autoInit: true, silentFailure: false });
+    appendDebug('detectLauncher complete');
+    appendDebug('asarPath value: ' + (DOM.asarPath?.value || 'EMPTY'));
+    console.log('[window.load] detectLauncher complete, asarPath value:', DOM.asarPath?.value);
     
-    // Load extracted ASAR list
-    await loadExtractedASARList();
-
-    detectLauncher({ autoInit: false, silentFailure: true });
+    // Load initial backups list (only after launcher is detected)
+    try {
+        console.log('[window.load] Loading backups...');
+        appendDebug('Loading backups...');
+        await loadBackupsList();
+        appendDebug('Backups loaded');
+        console.log('[window.load] Backups loaded');
+    } catch (e) {
+        appendDebug('Backup error: ' + e.message);
+        console.warn('[window.load] Error loading backups:', e);
+    }
+    
+    // Load extracted ASAR list (only after launcher is detected)
+    try {
+        console.log('[window.load] Loading extracted ASARs...');
+        appendDebug('Loading extracted ASARs...');
+        await loadExtractedASARList();
+        appendDebug('Extracted ASARs loaded');
+        console.log('[window.load] Extracted ASARs loaded');
+    } catch (e) {
+        appendDebug('Extracted ASAR error: ' + e.message);
+        console.warn('[window.load] Error loading extracted ASARs:', e);
+    }
     
     // Check for updates asynchronously (non-blocking)
     setTimeout(() => {
@@ -3013,3 +3098,4 @@ window.addEventListener('load', async () => {
     
     // Check for updates every 24 hours
     setInterval(checkForUpdates, 24 * 60 * 60 * 1000);
+}
