@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RUIE</title>
     <link rel="icon" type="image/x-icon" href="/icon.ico">
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="styles.css?v=2">
 </head>
 <body>
     <div class="container">
@@ -18,135 +18,195 @@
 
         <!-- Main Content Area -->
         <main class="content-wrapper">
-            <!-- Step 1: Initialize -->
+            <!-- Step 1: Initialize & Extract (Combined) -->
             <section class="step page" id="step-1" data-page="1">
-                <h2>Step 1: Initialize Session</h2>
-                <div class="form-group">
-                    <label for="asarPath">Path to app.asar:</label>
-                    <input type="text" id="asarPath" placeholder="C:\path\to\app.asar">
-                    <button class="btn btn-primary" onclick="detectLauncher()">Auto-Detect</button>
-                    <button class="btn btn-primary" onclick="initSession()">Initialize</button>
+                <h2>Step 1: Prepare & Extract</h2>
+                
+                <!-- Full Width: App.asar Detection -->
+                <div class="setup-panel" style="margin-bottom: 20px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="margin: 0;">App.asar Detection & Selection</h3>
+                        <label for="asarPath" style="color: #a0b0c0; font-size: 0.9em;">Path to app.asar:</label>
+                    </div>
+                    <div class="form-group" style="display: flex; align-items: center; gap: 15px; width: 100%;">
+                        <div style="display: flex; align-items: center; gap: 10px; width: 50%;">
+                            <input type="text" id="asarPath" placeholder="C:\path\to\app.asar" style="flex: 1; cursor: pointer;" readonly>
+                            <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar" onclick="browseForAsar()">✓</span>
+                        </div>
+                        <div style="display: flex; gap: 10px; flex: 1; justify-content: flex-end;">
+                            <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="browseForAsar()">📁 Browse</button>
+                            <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="detectLauncher()">🔍 Auto-Detect</button>
+                            <button id="init-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="initSession()">Initialize</button>
+                        </div>
+                    </div>
+                    <div id="init-status" class="status"></div>
                 </div>
-                <div id="init-status" class="status"></div>
+
+                <!-- Two Columns: ASAR Manager + Backup Manager -->
+                <div class="setup-layout">
+                    <!-- Left Column: ASAR Manager -->
+                    <div class="setup-panel setup-left">
+                        <h3>ASAR Manager</h3>
+                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Extract and manage ASAR versions.</p>
+                        
+                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Extract app.asar</button>
+                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
+                        </div>
+                        
+                        <div class="existing-extract" style="display: flex; flex-direction: column; margin-top: 15px;">
+                            <label for="extractSelect" style="margin-bottom: 8px;">Use existing extract:</label>
+                            <select id="extractSelect" class="media-filter"></select>
+                            <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.85em; padding: 8px 12px;" onclick="useSelectedExtract()">Use Selected</button>
+                        </div>
+
+                        <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
+                            <div class="progress-bar" id="extract-progress-bar" style="width: 0%;"></div>
+                            <div class="progress-text" id="extract-progress-text">Preparing extraction...</div>
+                        </div>
+                        <div id="extract-status" class="status"></div>
+
+                        <h4 style="color: #8db4d0; margin: 20px 0 10px 0; font-size: 0.95em;">Existing Extractions</h4>
+                        <div id="extractsList" class="extracts-list">
+                            <div class="extract-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">
+                                Loading extractions...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column: Backup Manager -->
+                    <div class="setup-panel setup-right">
+                        <h3>Backup Manager</h3>
+                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Manage your backups. Create snapshots before making changes.</p>
+                        
+                        <div class="backup-actions" style="margin-bottom: 15px; text-align: center;">
+                            <button class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
+                        </div>
+
+                        <h4 style="color: #8db4d0; margin: 15px 0 10px 0; font-size: 0.95em;">Existing Backups</h4>
+                        <div id="backupsList" class="backups-list">
+                            <div class="backup-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">
+                                No backups yet. Create one to get started.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="page-navigation">
                     <button class="btn btn-secondary" onclick="navigateToPage(2)">Next →</button>
                 </div>
             </section>
 
-            <!-- Step 2: Extract -->
+            <!-- Step 2: Colors -->
             <section class="step page" id="step-2" data-page="2" style="display: none;">
-                <h2>Step 2: Extract Archive</h2>
-                <p>The original app.asar will be backed up automatically.</p>
-                <button id="extract-btn" class="btn btn-primary" onclick="extractAsar()">Extract app.asar</button>
-                <button class="btn btn-secondary" onclick="openLatestExtract()">Open Last Extracted Folder</button>
-                <div class="existing-extract">
-                    <label for="extractSelect">Use existing extract:</label>
-                    <select id="extractSelect" class="media-filter"></select>
-                    <button class="btn btn-secondary" onclick="useSelectedExtract()">Use Selected</button>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 20px;">
+                    <div>
+                        <h2 style="margin: 0 0 5px 0;">Step 2: Customize Colors</h2>
+                        <p style="margin: 0; font-size: 0.9em;">Create your color palette by mapping old colors to new ones.</p>
+                    </div>
+                    <div style="display: flex; gap: 10px; align-items: center; flex-shrink: 0;">
+                        <div class="color-presets" style="margin: 0; min-width: 250px;">
+                            <select id="preset-selector" class="preset-dropdown" onchange="handlePresetChange(this.value)">
+                                <option value="">Select a manufacturer preset...</option>
+                                <option value="rsi">RSI</option>
+                                <option value="aegis-dynamics">Aegis Dynamics</option>
+                                <option value="anvil-aerospace">Anvil Aerospace</option>
+                                <option value="aopoa">Aopoa</option>
+                                <option value="argo">Argo Astronautics</option>
+                                <option value="banu">Banu</option>
+                                <option value="consolidated-outland">Consolidated Outland</option>
+                                <option value="crusader-industries">Crusader Industries</option>
+                                <option value="drake-interplanetary">Drake Interplanetary</option>
+                                <option value="esperia">Esperia</option>
+                                <option value="gatac">Gatac Manufacture</option>
+                                <option value="greycat">Greycat Industrial</option>
+                                <option value="kruger">Kruger Intergalactic</option>
+                                <option value="misc">MISC</option>
+                                <option value="origin-jumpworks">Origin Jumpworks</option>
+                                <option value="tumbril">Tumbril Land Systems</option>
+                                <option value="vanduul">Vanduul</option>
+                                <option value="c3rb">C3RB (Custom)</option>
+                            </select>
+                        </div>
+                        <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85em; white-space: nowrap;" onclick="importThemeFromColors()" title="Import theme from file">📥 Import</button>
+                        <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85em; white-space: nowrap;" onclick="exportCurrentPreset()" title="Export current colors to file">📤 Export</button>
+                        <button class="btn btn-secondary" style="padding: 8px 16px; font-size: 0.85em; white-space: nowrap;" onclick="saveCurrentPreset()" title="Save colors to server">💾 Save</button>
+                    </div>
                 </div>
-                <div id="extract-progress" class="progress" style="display: none;">
-                    <div class="progress-bar" id="extract-progress-bar" style="width: 0%;"></div>
-                    <div class="progress-text" id="extract-progress-text">Preparing extraction...</div>
+
+                <div class="split-layout">
+                    <div class="editor-panel">
+                        <div class="color-mappings">
+                            <div id="colorList" class="color-list"></div>
+                            <button class="btn btn-secondary" onclick="addColorMapping()">+ Add Color Mapping</button>
+                        </div>
+                        <div id="colors-status" class="status" style="margin-top: 15px;"></div>
+                    </div>
+
+                    <div class="preview-panel" style="display: flex; flex-direction: column;">
+                        <div class="preview-header">Live Theme Preview</div>
+                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview" style="flex: 1;"></iframe>
+                        <div style="padding: 15px; border-top: 1px solid rgba(0, 212, 255, 0.15);">
+                            <button class="btn btn-primary" style="width: 100%;" onclick="applyColors()">Apply Colors</button>
+                        </div>
+                    </div>
                 </div>
-                <div id="extract-status" class="status"></div>
-                <div class="page-navigation">
+
+                <div class="page-navigation" style="margin-top: 20px;">
                     <button class="btn btn-secondary" onclick="navigateToPage(1)">← Back</button>
                     <button class="btn btn-secondary" onclick="navigateToPage(3)">Next →</button>
                 </div>
             </section>
 
-            <!-- Step 3: Colors -->
+            <!-- Step 3: Media -->
             <section class="step page" id="step-3" data-page="3" style="display: none;">
-                <h2>Step 3: Customize Colors</h2>
-                <p>Create your color palette by mapping old colors to new ones.</p>
+                <h2>Step 3: Replace Media Files</h2>
 
-                <div class="editor-panel">
-                    <div class="color-presets">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <h3 style="margin: 0;">Quick Presets</h3>
-                            <button class="btn btn-secondary" style="padding: 6px 12px; font-size: 13px;" onclick="importThemeFromColors()">📥 Import Theme</button>
+                <div class="split-layout">
+                    <div class="editor-panel">
+                        <div class="media-section">
+                            <div class="media-actions">
+                                <label class="media-filter-label" for="mediaFilter">Filter:</label>
+                                <select id="mediaFilter" class="media-filter" onchange="applyMediaAssetFilter()">
+                                    <option value="all">All</option>
+                                    <option value="image">Images</option>
+                                    <option value="video">Videos</option>
+                                </select>
+                            </div>
+                            <div id="mediaAssetPicker" class="media-asset-picker"></div>
                         </div>
-                        <select id="preset-selector" class="preset-dropdown" onchange="handlePresetChange(this.value)">
-                            <option value="">Select a manufacturer preset...</option>
-                            <option value="rsi">RSI</option>
-                            <option value="aegis-dynamics">Aegis Dynamics</option>
-                            <option value="anvil-aerospace">Anvil Aerospace</option>
-                            <option value="aopoa">Aopoa</option>
-                            <option value="argo">Argo Astronautics</option>
-                            <option value="banu">Banu</option>
-                            <option value="consolidated-outland">Consolidated Outland</option>
-                            <option value="crusader-industries">Crusader Industries</option>
-                            <option value="drake-interplanetary">Drake Interplanetary</option>
-                            <option value="esperia">Esperia</option>
-                            <option value="gatac">Gatac Manufacture</option>
-                            <option value="greycat">Greycat Industrial</option>
-                            <option value="kruger">Kruger Intergalactic</option>
-                            <option value="misc">MISC</option>
-                            <option value="origin-jumpworks">Origin Jumpworks</option>
-                            <option value="tumbril">Tumbril Land Systems</option>
-                            <option value="vanduul">Vanduul</option>
-                            <option value="c3rb">C3RB (Custom)</option>
-                        </select>
+                        <div id="media-status" class="status" style="margin-top: 15px;"></div>
                     </div>
 
-                    <div class="color-mappings">
-                        <h3>Color Mappings</h3>
-                        <div id="colorList" class="color-list"></div>
-                        <button class="btn btn-secondary" onclick="addColorMapping()">+ Add Color Mapping</button>
+                    <div class="preview-panel" style="display: flex; flex-direction: column;">
+                        <div class="preview-header">Live Theme Preview</div>
+                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview" style="flex: 1;"></iframe>
+                        <div style="padding: 15px; border-top: 1px solid rgba(0, 212, 255, 0.15);">
+                            <button class="btn btn-primary" style="width: 100%;" onclick="applyMedia()">Apply Media Changes</button>
+                        </div>
                     </div>
-
-                    <button class="btn btn-primary" onclick="applyColors()">Apply Colors</button>
-                    <div id="colors-status" class="status"></div>
-                </div>
-
-                <div class="preview-panel" style="margin-top: 30px;">
-                    <div class="preview-header">Live Theme Preview</div>
-                    <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview"></iframe>
                 </div>
 
                 <div class="page-navigation" style="margin-top: 20px;">
-                    <button class="btn btn-secondary" onclick="navigateToPage(3)">← Back</button>
+                    <button class="btn btn-secondary" onclick="navigateToPage(2)">← Back</button>
                     <button class="btn btn-secondary" onclick="navigateToPage(4)">Next →</button>
                 </div>
             </section>
 
-            <!-- Step 4: Media -->
+            <!-- Step 4: Music -->
             <section class="step page" id="step-4" data-page="4" style="display: none;">
-                <h2>Step 4: Replace Media Files</h2>
-                <p>Select replacement files for images and videos. The preview will update to show your changes.</p>
-
-                <div class="editor-panel">
-                    <div class="media-section">
-                        <div class="media-actions">
-                            <label class="media-filter-label" for="mediaFilter">Filter:</label>
-                            <select id="mediaFilter" class="media-filter" onchange="applyMediaAssetFilter()">
-                                <option value="all">All</option>
-                                <option value="image">Images</option>
-                                <option value="video">Videos</option>
-                            </select>
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; gap: 20px;">
+                    <h2 style="margin: 0;">Step 4: Customize Music</h2>
+                    <div class="music-player">
+                        <div class="music-player-info">
+                            <div class="music-player-title" id="currentTrackName">No track selected</div>
+                            <div class="music-player-type" id="currentTrackType"></div>
                         </div>
-                        <div id="mediaAssetPicker" class="media-asset-picker"></div>
+                        <audio id="musicPlayerElement" controls controlsList="nodownload">
+                            Your browser does not support the audio element.
+                        </audio>
                     </div>
-
-                    <button class="btn btn-primary" onclick="applyMedia()">Apply Media Changes</button>
-                    <div id="media-status" class="status"></div>
                 </div>
-
-                <div class="preview-panel" style="margin-top: 30px;">
-                    <div class="preview-header">Live Theme Preview</div>
-                    <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview"></iframe>
-                </div>
-
-                <div class="page-navigation" style="margin-top: 20px;">
-                    <button class="btn btn-secondary" onclick="navigateToPage(3)">← Back</button>
-                    <button class="btn btn-secondary" onclick="navigateToPage(5)">Next →</button>
-                </div>
-            </section>
-
-            <!-- Step 5: Music -->
-            <section class="step page" id="step-5" data-page="5" style="display: none;">
-                <h2>Step 5: Customize Music</h2>
-                <p>Manage the background music playlist for the launcher.</p>
 
                 <div class="editor-panel">
                     <div class="music-section">
@@ -166,56 +226,57 @@
                 </div>
 
                 <div class="page-navigation" style="margin-top: 20px;">
-                    <button class="btn btn-secondary" onclick="navigateToPage(4)">← Back</button>
-                    <button class="btn btn-secondary" onclick="navigateToPage(6)">Next →</button>
+                    <button class="btn btn-secondary" onclick="navigateToPage(3)">← Back</button>
+                    <button class="btn btn-secondary" onclick="navigateToPage(5)">Next →</button>
                 </div>
             </section>
 
-            <!-- Step 6: Finalize -->
-            <section class="step page" id="step-6" data-page="6" style="display: none;">
-                <h2>Step 6: Repack, Test & Finalize</h2>
+            <!-- Step 5: Finalize -->
+            <section class="step page" id="step-5" data-page="5" style="display: none;">
+                <h2>Step 5: Repack, Test & Finalize</h2>
                 <p>Compile your changes and test the modified launcher.</p>
 
-                <div class="finalize-grid">
-                    <div class="finalize-column">
-                        <h3>Theme Management</h3>
-                        <div class="theme-actions">
-                            <button class="btn btn-secondary" onclick="saveTheme()">💾 Save Theme</button>
-                            <button class="btn btn-secondary" onclick="exportTheme()">📤 Export Theme</button>
-                            <button class="btn btn-secondary" onclick="importTheme()">📥 Import Theme</button>
-                            <button class="btn btn-secondary" onclick="loadSavedThemes()">📂 Load Saved Theme</button>
+                <div class="split-layout">
+                    <div class="editor-panel">
+                        <div class="preset-selector-container">
+                            <label for="preset-selector" class="preset-label">Select a Manufacturer Preset:</label>
+                            <select id="preset-selector" class="preset-dropdown" onchange="handlePresetChange(this.value)">
+                                <option value="">Select a manufacturer preset...</option>
+                                <option value="rsi">RSI</option>
+                                <option value="aegis-dynamics">Aegis Dynamics</option>
+                                <option value="anvil-aerospace">Anvil Aerospace</option>
+                                <option value="aopoa">Aopoa</option>
+                                <option value="argo">Argo Astronautics</option>
+                                <option value="banu">Banu</option>
+                                <option value="consolidated-outland">Consolidated Outland</option>
+                                <option value="crusader-industries">Crusader Industries</option>
+                                <option value="drake-interplanetary">Drake Interplanetary</option>
+                                <option value="esperia">Esperia</option>
+                                <option value="gatac">Gatac Manufacture</option>
+                                <option value="greycat">Greycat Industrial</option>
+                                <option value="kruger">Kruger Intergalactic</option>
+                                <option value="misc">MISC</option>
+                                <option value="origin-jumpworks">Origin Jumpworks</option>
+                                <option value="tumbril">Tumbril Land Systems</option>
+                                <option value="vanduul">Vanduul</option>
+                                <option value="c3rb">C3RB (Custom)</option>
+                            </select>
                         </div>
+
+                        <div class="color-mappings">
+                            <div id="colorList" class="color-list"></div>
+                            <button class="btn btn-secondary" onclick="addColorMapping()">+ Add Color Mapping</button>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="applyColors()">Apply Colors</button>
+                        <div id="colors-status" class="status"></div>
                     </div>
-                    
-                    <div class="finalize-column">
-                        <h3>Deploy & Test</h3>
-                        <div class="actions">
-                            <button class="btn btn-primary" onclick="deployTheme()">Deploy Theme (Install to Launcher)</button>
-                            <button class="btn btn-secondary" onclick="testLauncher()">Test Launcher (Temporary)</button>
-                            <button class="btn btn-secondary" onclick="viewBackups()">View Backups</button>
-                        </div>
+
+                    <div class="preview-panel">
+                        <div class="preview-header">Live Theme Preview</div>
+                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview"></iframe>
                     </div>
                 </div>
-                
-                <input type="file" id="themeImportInput" accept=".theme.json,.json" style="display: none;" onchange="handleThemeImport(event)">
-
-                <div id="finalize-status" class="status"></div>
-                <div class="page-navigation">
-                    <button class="btn btn-secondary" onclick="navigateToPage(5)">← Back</button>
-                </div>
-            </section>
-
-            <!-- Saved Themes -->
-            <section class="step" id="themes-section" style="display: none;">
-                <h2>Saved Themes</h2>
-                <p>Click a theme to load it into the editor.</p>
-                <div id="themesList" class="themes-list"></div>
-                <button class="btn btn-secondary" onclick="closeThemesList()">Close</button>
-            </section>
-
-            <!-- Backups -->
-            <section class="step" id="backups-section" style="display: none;">
-                <h2>Backups & Restore</h2>
                 <div id="backupsList" class="backups-list"></div>
             </section>
         </main>
@@ -230,31 +291,26 @@
                 <div class="stepper">
                     <div class="stepper-step active" id="stepper-1" onclick="navigateToPage(1)">
                         <div class="stepper-circle">1</div>
-                        <div class="stepper-label">Init</div>
+                        <div class="stepper-label">Setup</div>
                     </div>
                     <div class="stepper-line"></div>
                     <div class="stepper-step" id="stepper-2" onclick="navigateToPage(2)">
                         <div class="stepper-circle">2</div>
-                        <div class="stepper-label">Extract</div>
+                        <div class="stepper-label">Colors</div>
                     </div>
                     <div class="stepper-line"></div>
                     <div class="stepper-step" id="stepper-3" onclick="navigateToPage(3)">
                         <div class="stepper-circle">3</div>
-                        <div class="stepper-label">Colors</div>
+                        <div class="stepper-label">Media</div>
                     </div>
                     <div class="stepper-line"></div>
                     <div class="stepper-step" id="stepper-4" onclick="navigateToPage(4)">
                         <div class="stepper-circle">4</div>
-                        <div class="stepper-label">Media</div>
+                        <div class="stepper-label">Music</div>
                     </div>
                     <div class="stepper-line"></div>
                     <div class="stepper-step" id="stepper-5" onclick="navigateToPage(5)">
                         <div class="stepper-circle">5</div>
-                        <div class="stepper-label">Music</div>
-                    </div>
-                    <div class="stepper-line"></div>
-                    <div class="stepper-step" id="stepper-6" onclick="navigateToPage(6)">
-                        <div class="stepper-circle">6</div>
                         <div class="stepper-label">Finish</div>
                     </div>
                 </div>
@@ -266,6 +322,6 @@
         </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=2"></script>
 </body>
 </html>

@@ -32,8 +32,24 @@ static_folder = get_resource_path('public')
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
 CORS(app)
 
+# Performance configurations
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 86400  # 24 hour cache for static files
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max upload
+app.config['JSON_SORT_KEYS'] = False  # Don't sort JSON keys for speed
+
+# Add cache headers for static files
+@app.after_request
+def add_cache_headers(response):
+    """Add cache headers to reduce bandwidth and improve performance."""
+    if response.content_type and ('image' in response.content_type or 
+                                   'font' in response.content_type or
+                                   'css' in response.content_type or
+                                   'javascript' in response.content_type):
+        response.cache_control.max_age = 86400  # 24 hours for static assets
+    return response
+
 # Configuration
-DOCS_DIR = os.path.expanduser('~/Documents/RSI-Launcher-Theme-Creator')
+DOCS_DIR = os.path.expanduser('~/Documents/RUIE')
 os.makedirs(DOCS_DIR, exist_ok=True)
 
 class ThemeManager:
@@ -43,6 +59,7 @@ class ThemeManager:
         self.launcher_info = None
         self.extracted_dir = None
         self.backup_dir = None
+        self.color_apply_thread = None
         self.status = {
             'operation': None,
             'state': 'idle',
@@ -133,23 +150,58 @@ class ThemeManager:
             return False
     
     def apply_colors(self, color_mappings):
-        """Apply color replacements."""
+        """Apply color replacements synchronously."""
         try:
             if not self.extracted_dir or not os.path.exists(self.extracted_dir):
-                print(f"Error: extracted_dir not set or doesn't exist: {self.extracted_dir}")
+                error_msg = f"Error: extracted_dir not set or doesn't exist: {self.extracted_dir}"
+                print(error_msg)
+                self.set_status('apply-colors', 'error', error_msg, progress=0, last_error=error_msg)
                 return 0
             
-            print(f"Applying colors to: {self.extracted_dir}")
-            print(f"Color mappings count: {len(color_mappings)}")
+            self.set_status('apply-colors', 'running', 'Scanning for files...', progress=10, last_error=None)
+            print(f"\n=== Color Application Started ===")
+            print(f"Extracted directory: {self.extracted_dir}")
+            print(f"Directory exists: {os.path.exists(self.extracted_dir)}")
+            print(f"Color mappings received: {len(color_mappings)} color(s)")
+            for key, value in list(color_mappings.items())[:3]:
+                print(f"  - {key}: {value}")
             
-            result = ColorReplacer.apply_colors(self.extracted_dir, color_mappings)
+            # Create progress callback
+            def progress_callback(current, total, message):
+                progress = 10 + int((current / total) * 80) if total > 0 else 45
+                self.set_status('apply-colors', 'running', message, progress=progress, last_error=None)
+                print(f"[Progress {progress}%] {message}")
+            
+            result = ColorReplacer.apply_colors(self.extracted_dir, color_mappings, progress_callback)
             print(f"Color replacement result: {result} files modified")
+            
+            if result > 0:
+                self.set_status('apply-colors', 'done', f'Applied colors to {result} files', progress=100, last_error=None)
+            else:
+                error_msg = 'No files were modified - could not find colors to replace'
+                self.set_status('apply-colors', 'error', error_msg, progress=0, last_error=error_msg)
+            
             return result
         except Exception as e:
-            print(f"Exception in apply_colors: {e}")
+            error_msg = f"Exception in apply_colors: {e}"
+            print(error_msg)
             import traceback
             traceback.print_exc()
+            self.set_status('apply-colors', 'error', error_msg, progress=0, last_error=str(e))
             return 0
+    
+    def apply_colors_async(self, color_mappings):
+        """Apply color replacements in a background thread."""
+        def _apply():
+            self.apply_colors(color_mappings)
+        
+        if self.color_apply_thread and self.color_apply_thread.is_alive():
+            print("Color apply operation already in progress")
+            return False
+        
+        self.color_apply_thread = threading.Thread(target=_apply, daemon=True)
+        self.color_apply_thread.start()
+        return True
     
     def apply_media(self, media_mappings):
         """Apply media replacements."""
@@ -526,6 +578,21 @@ def api_default_music():
     })
 
 
+@app.route('/api/music/<path:filename>', methods=['GET'])
+def api_music(filename):
+    """Serve music files from assets/musics for preview."""
+    music_dir = _find_musics_dir()
+    if not music_dir:
+        return jsonify({'success': False, 'error': 'Music directory not found'}), 404
+
+    safe_name = Path(filename).name
+    file_path = music_dir / safe_name
+    if not file_path.exists():
+        return jsonify({'success': False, 'error': 'Music file not found'}), 404
+
+    return send_file(file_path)
+
+
 @app.route('/api/music-file/<path:filename>', methods=['GET'])
 def api_music_file(filename):
     """Serve music files from assets/musics for preview."""
@@ -594,7 +661,10 @@ def api_launcher_asset():
 @app.route('/api/init', methods=['GET', 'POST'])
 def api_init():
     """Initialize and detect launcher."""
+    print("[api_init] Calling theme_manager.init()")
     success = theme_manager.init()
+    print(f"[api_init] theme_manager.init() returned: {success}")
+    print(f"[api_init] theme_manager.launcher_info: {theme_manager.launcher_info}")
     
     if success:
         return jsonify({
@@ -611,6 +681,62 @@ def api_init():
 def api_detect_launcher():
     """Alias for /api/init"""
     return api_init()
+
+@app.route('/api/launcher-status', methods=['GET', 'POST'])
+def api_launcher_status():
+    """Check if RSI Launcher process is currently running."""
+    try:
+        is_running = LauncherDetector.is_launcher_running()
+        return jsonify({
+            'success': True,
+            'isRunning': is_running
+        })
+    except Exception as e:
+        print(f"Error checking launcher status: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'isRunning': False
+        }), 500
+
+@app.route('/api/browse-for-asar', methods=['POST'])
+def api_browse_for_asar():
+    """Open file picker dialog for user to select app.asar file."""
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+        
+        # Create a hidden root window
+        root = tk.Tk()
+        root.withdraw()  # Hide the window
+        root.attributes('-topmost', True)  # Bring to front
+        
+        # Open file picker
+        file_path = filedialog.askopenfilename(
+            title="Select app.asar file",
+            filetypes=[("ASAR files", "*.asar"), ("All files", "*.*")],
+            initialdir=os.path.expanduser('~')
+        )
+        
+        root.destroy()
+        
+        if file_path:
+            return jsonify({
+                'success': True,
+                'path': file_path
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'path': None,
+                'message': 'No file selected'
+            })
+    except Exception as e:
+        print(f"Error opening file picker: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
@@ -663,15 +789,24 @@ def api_extracted_list():
     """List extracted folders for reuse."""
     try:
         base = Path(DOCS_DIR)
+        print(f'[API] Checking for extracted folders in: {base}')
+        print(f'[API] Base directory exists: {base.exists()}')
+        
         if not base.exists():
+            print('[API] Base directory does not exist, returning empty list')
             return jsonify({'success': True, 'extracts': []})
         
+        all_items = list(base.iterdir())
+        print(f'[API] Found {len(all_items)} items in base directory')
+        
         extracts = sorted(
-            [p for p in base.iterdir() if p.is_dir() and p.name.startswith('app-extracted-')],
+            [p for p in all_items if p.is_dir() and p.name.startswith('app-extracted-')],
             key=lambda p: p.name,
             reverse=True
         )
-        return jsonify({
+        print(f'[API] Found {len(extracts)} extracted folders')
+        
+        result = {
             'success': True,
             'extracts': [
                 {
@@ -680,9 +815,13 @@ def api_extracted_list():
                     'date': p.name.replace('app-extracted-', '')
                 } for p in extracts
             ]
-        })
+        }
+        print(f'[API] Returning: {result}')
+        return jsonify(result)
     except Exception as e:
         print(f'[API Error] Failed to list extracts: {str(e)}')
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/use-extract', methods=['POST'])
@@ -707,6 +846,40 @@ def api_use_extract():
         'extractedPath': theme_manager.extracted_dir,
         'changes': changes
     })
+
+@app.route('/api/delete-extract', methods=['POST'])
+def api_delete_extract():
+    """Delete an extracted ASAR folder."""
+    data = request.json or {}
+    path_str = data.get('path', '').strip()
+    
+    if not path_str:
+        return jsonify({'success': False, 'error': 'Missing path'}), 400
+    
+    path = Path(path_str)
+    
+    # Verify the path exists and is in the expected directory
+    if not path.exists():
+        return jsonify({'success': False, 'error': 'Extracted folder not found'}), 404
+    
+    try:
+        # Prevent deletion if it's the currently active extraction
+        if theme_manager.extracted_dir and Path(theme_manager.extracted_dir) == path:
+            return jsonify({'success': False, 'error': 'Cannot delete the currently active extraction'}), 400
+        
+        # Delete the directory recursively
+        import shutil
+        shutil.rmtree(str(path))
+        
+        print(f'[API] Deleted extracted folder: {path}')
+        
+        return jsonify({
+            'success': True,
+            'message': 'Extracted ASAR deleted successfully'
+        })
+    except Exception as e:
+        print(f'[API Error] Failed to delete extract: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/extraction-changes', methods=['GET'])
 def api_extraction_changes():
@@ -738,12 +911,18 @@ def api_status():
     """Return current operation status for progress indicators."""
     return jsonify({
         'success': True,
-        'status': theme_manager.status
+        'status': theme_manager.status,
+        # Also flatten for backwards compatibility
+        'operation': theme_manager.status.get('operation'),
+        'state': theme_manager.status.get('state'),
+        'message': theme_manager.status.get('message'),
+        'progress': theme_manager.status.get('progress'),
+        'lastError': theme_manager.status.get('lastError')
     })
 
 @app.route('/api/apply-colors', methods=['POST'])
 def api_apply_colors():
-    """Apply color replacements."""
+    """Apply color replacements asynchronously."""
     try:
         data = request.json
         color_mappings = data.get('colors', {})
@@ -751,11 +930,14 @@ def api_apply_colors():
         if not color_mappings:
             return jsonify({'success': False, 'error': 'No color mappings provided'}), 400
         
-        count = theme_manager.apply_colors(color_mappings)
+        # Start async operation
+        if not theme_manager.apply_colors_async(color_mappings):
+            return jsonify({'success': False, 'error': 'Color apply operation already in progress'}), 409
         
         return jsonify({
             'success': True,
-            'filesModified': count
+            'message': 'Color application started',
+            'async': True
         })
     except Exception as e:
         print(f"Error in apply_colors: {e}")
@@ -1217,6 +1399,43 @@ def api_restore():
         return jsonify({
             'success': True,
             'message': 'Launcher restored from backup'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/save-preset', methods=['POST'])
+def api_save_preset():
+    """Save a custom color preset to the presets directory."""
+    try:
+        data = request.get_json()
+        if not data or 'name' not in data or 'colors' not in data:
+            return jsonify({'success': False, 'error': 'Missing name or colors'}), 400
+
+        # Create presets directory in public folder
+        presets_dir = Path(static_folder) / 'presets'
+        presets_dir.mkdir(exist_ok=True)
+
+        # Sanitize filename
+        name = data['name'].strip()
+        filename = re.sub(r'[^a-z0-9-]+', '-', name.lower()) + '.json'
+        filepath = presets_dir / filename
+
+        # Save preset
+        preset_data = {
+            'name': name,
+            'description': data.get('description', 'Custom preset'),
+            'colors': data['colors'],
+            'media': data.get('media', {}),
+            'music': data.get('music', [])
+        }
+
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(preset_data, f, indent=2)
+
+        return jsonify({
+            'success': True,
+            'message': f'Preset saved as {filename}',
+            'filename': filename
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

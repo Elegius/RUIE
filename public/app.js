@@ -1,8 +1,11 @@
+// Initialize early to check if script is loading
+console.log('[app.js] Script loaded at', new Date().toISOString());
+
 // Global state
 const state = {
     initialized: false,
     extracted: false,
-    colors: {}, // Will be initialized with rsiOriginal after presets are defined
+    colors: {}, // Will be initialized after preset files are loaded
     media: {},
     music: [], // Array of music files: [{ name: 'track1.ogg', file: File }, ...]
     config: {
@@ -40,6 +43,7 @@ const DOM = {
         this.pages = document.querySelectorAll('.page');
         this.stepperSteps = document.querySelectorAll('.stepper-step');
         this.previewFrame = document.getElementById('previewFrame');
+        this.previewFrames = document.querySelectorAll('.preview-frame');
         this.asarPath = document.getElementById('asarPath');
         this.extractProgress = document.getElementById('extract-progress');
         this.extractProgressBar = document.getElementById('extract-progress-bar');
@@ -51,16 +55,21 @@ const DOM = {
         this.colorList = document.getElementById('colorList');
         this.backBtn = document.getElementById('backBtn');
         this.nextBtn = document.getElementById('nextBtn');
+        this.musicList = document.getElementById('musicList');
+        this.mediaAssetPicker = document.getElementById('mediaAssetPicker');
+        this.mediaFilter = document.getElementById('mediaFilter');
 
         // Sync preview state when any preview iframe loads
-        const frames = document.querySelectorAll('.preview-frame');
-        frames.forEach((frame) => {
+        this.previewFrames.forEach((frame) => {
             frame.addEventListener('load', () => {
                 sendPreviewStateToFrame(frame);
             });
         });
     }
 };
+
+// Debounce preview updates to reduce reflows during rapid input
+const debouncedUpdatePreview = debounce(updatePreviewFromUi, 150);
 
 // Debounce helper for performance
 function debounce(func, wait) {
@@ -92,11 +101,10 @@ function navigateToPage(pageNumber) {
         sendPreviewStateToFrame(getActivePreviewFrame());
         
         // Render color mappings when navigating to colors page
-        if (pageNumber === 3) {
+        if (pageNumber === 2) {
             // Show loading message
-            const colorList = document.getElementById('colorList');
-            if (colorList) {
-                colorList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Loading color palette...</div>';
+            if (DOM.colorList) {
+                DOM.colorList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Loading color palette...</div>';
             }
             // Render after UI updates and update preview
             setTimeout(() => {
@@ -110,7 +118,7 @@ function navigateToPage(pageNumber) {
         }
         
         // Load media assets when navigating to media page
-        if (pageNumber === 4) {
+        if (pageNumber === 3) {
             if (lastMediaAssets.length === 0) {
                 loadDefaultMediaAssets();
             }
@@ -118,7 +126,7 @@ function navigateToPage(pageNumber) {
         }
         
         // Initialize music list when navigating to music page
-        if (pageNumber === 5) {
+        if (pageNumber === 4) {
             if (state.music.length === 0) {
                 loadDefaultMusic();
             } else {
@@ -158,7 +166,7 @@ function updateNavigationButtons(currentPage) {
     DOM.backBtn.style.display = currentPage > 1 ? 'block' : 'none';
     
     // Show/hide next button
-    DOM.nextBtn.style.display = currentPage < 6 ? 'block' : 'none';
+    DOM.nextBtn.style.display = currentPage < 5 ? 'block' : 'none';
 }
 
 const previewDefaults = {
@@ -275,836 +283,182 @@ function setColorControls(item, hex) {
 }
 
 function attachColorControlListeners(item) {
-    const wheelHidden = item.querySelector('.color-wheel-hidden');
-    const newInput = item.querySelector('.new-color');
+    const colorWheel = item.querySelector('.color-wheel');
     const hexInput = item.querySelector('.hex-input');
-    const rgbInput = item.querySelector('.rgb-input');
-    const colorPickerButton = item.querySelector('.color-picker-button');
+    const rgbR = item.querySelector('.rgb-r');
+    const rgbG = item.querySelector('.rgb-g');
+    const rgbB = item.querySelector('.rgb-b');
+    const newColorHidden = item.querySelector('.new-color');
+    const colorPreview = item.querySelector('.color-preview');
 
     const updateAllFields = (hex) => {
-        if (hexInput) hexInput.value = hex;
-        if (rgbInput) rgbInput.value = hexToRGB(hex);
-        if (wheelHidden) wheelHidden.value = hex;
-        if (newInput) newInput.value = hex;
+        if (!hex || !hex.startsWith('#')) return;
+        
+        // Update hex input
+        if (hexInput) hexInput.value = hex.toUpperCase();
+        
+        // Update RGB inputs
+        const rgb = hexToRGB(hex);
+        if (rgb) {
+            const [r, g, b] = rgb.split(',').map(v => parseInt(v.trim()));
+            if (rgbR) rgbR.value = r;
+            if (rgbG) rgbG.value = g;
+            if (rgbB) rgbB.value = b;
+        }
+        
+        // Update color wheel
+        if (colorWheel) colorWheel.value = hex;
+        
+        // Update hidden new color value
+        if (newColorHidden) newColorHidden.value = hex;
+        
+        // Update preview
+        if (colorPreview) colorPreview.style.background = hex;
+        
         updatePreviewFromUi();
     };
 
-    // Handle color wheel (hidden input)
-    if (wheelHidden) {
-        wheelHidden.addEventListener('input', (event) => {
+    // Handle color wheel changes
+    if (colorWheel) {
+        colorWheel.addEventListener('input', (event) => {
             updateAllFields(event.target.value);
         });
     }
 
-    // Handle hex input
+    // Handle hex input changes
     if (hexInput) {
         hexInput.addEventListener('input', () => {
             let hex = hexInput.value.trim();
-            // Auto-format if user types without #
             if (hex && !hex.startsWith('#')) {
                 hex = '#' + hex;
+                hexInput.value = hex;
             }
-            // Validate hex format
             if (hex.length === 7 && /^#[0-9A-Fa-f]{6}$/.test(hex)) {
                 updateAllFields(hex.toUpperCase());
             }
         });
-
-        hexInput.addEventListener('blur', () => {
-            const hex = hexInput.value.trim();
-            if (!hex || !hex.startsWith('#') || hex.length !== 7) {
-                // Reset to current color on invalid input
-                if (wheelHidden && wheelHidden.value) {
-                    updateAllFields(wheelHidden.value);
-                }
-            }
-        });
     }
 
-    // Handle RGB input
-    if (rgbInput) {
-        rgbInput.addEventListener('input', () => {
-            const rgb = rgbInput.value.trim();
-            if (rgb) {
-                const hex = rgbToHex(rgb);
-                if (hex) {
-                    updateAllFields(hex);
-                }
+    // Handle RGB input changes
+    const updateFromRGB = () => {
+        const r = parseInt(rgbR?.value || 0);
+        const g = parseInt(rgbG?.value || 0);
+        const b = parseInt(rgbB?.value || 0);
+        
+        if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
+            const hex = rgbToHex(`${r}, ${g}, ${b}`);
+            if (hex) {
+                updateAllFields(hex);
             }
-        });
+        }
+    };
 
-        rgbInput.addEventListener('blur', () => {
-            const rgb = rgbInput.value.trim();
-            if (rgb) {
-                const hex = rgbToHex(rgb);
-                if (!hex) {
-                    // Reset to current color on invalid input
-                    if (wheelHidden && wheelHidden.value) {
-                        updateAllFields(wheelHidden.value);
-                    }
-                }
+    if (rgbR) rgbR.addEventListener('input', updateFromRGB);
+    if (rgbG) rgbG.addEventListener('input', updateFromRGB);
+    if (rgbB) rgbB.addEventListener('input', updateFromRGB);
+}
+
+let colorPresets = {};
+
+const presetFiles = [
+    'rsi',
+    'aegis-dynamics',
+    'anvil-aerospace',
+    'origin-jumpworks',
+    'drake-interplanetary',
+    'crusader-industries',
+    'misc',
+    'consolidated-outland',
+    'banu',
+    'esperia',
+    'kruger',
+    'argo',
+    'aopoa',
+    'tumbril',
+    'greycat',
+    'vanduul',
+    'gatac',
+    'c3rb'
+];
+
+async function loadPresetFiles() {
+    const loaded = {};
+
+    for (let i = 0; i < presetFiles.length; i++) {
+        const presetId = presetFiles[i];
+        try {
+            const response = await fetch(`/presets/color-mapping-${presetId}.json`);
+            if (!response.ok) {
+                console.warn(`Preset file not found: ${presetId}`);
+                continue;
             }
-        });
+            const preset = await response.json();
+            loaded[presetId] = preset;
+        } catch (error) {
+            console.warn(`Failed to load preset ${presetId}:`, error);
+        }
     }
 
-    // Handle color picker button
-    if (colorPickerButton) {
-        colorPickerButton.addEventListener('click', (event) => {
-            openColorPicker(event);
-        });
+    // Merge presets with base inheritance and pad with RSI colors
+    const rsiColors = loaded.rsi && loaded.rsi.colors ? loaded.rsi.colors : {};
+
+    Object.keys(loaded).forEach((presetId) => {
+        const preset = loaded[presetId];
+        const baseId = preset.base || (presetId !== 'rsi' ? 'rsi' : null);
+        const basePreset = baseId ? loaded[baseId] : null;
+        const baseColors = basePreset && basePreset.colors ? basePreset.colors : {};
+        const mergedColors = { ...rsiColors, ...baseColors, ...(preset.colors || {}) };
+
+        colorPresets[presetId] = {
+            colors: mergedColors,
+            media: preset.media || {
+                logo: 'assets/logos/cig-logo.svg',
+                background: 'assets/images/sc_bg_fallback.jpg'
+            }
+        };
+    });
+
+    if (!colorPresets.rsi && loaded.rsi) {
+        colorPresets.rsi = { colors: loaded.rsi.colors || {}, media: loaded.rsi.media || {} };
     }
 
-    // Handle main new-color input
-    if (newInput) {
-        newInput.addEventListener('input', () => {
-            const normalized = normalizeColorToHex(newInput.value);
-            if (normalized) {
-                updateAllFields(normalized);
-            } else {
-                updatePreviewFromUi();
-            }
-        });
+    // Initialize defaults if available
+    if (colorPresets.rsi && colorPresets.rsi.colors) {
+        state.colors = { ...colorPresets.rsi.colors };
+    }
+    if (colorPresets.rsi && colorPresets.rsi.media) {
+        state.media = { ...colorPresets.rsi.media };
     }
 }
 
-// Color presets
-// RSI Original - actual RSI Launcher default colors
-const rsiOriginal = {
-    '--sol-color-primary-1': '#071a25',
-    '--sol-color-primary-1-rgb': '7 26 37',
-    '--sol-color-primary-2': '#0a1f2e',
-    '--sol-color-primary-2-rgb': '10 31 46',
-    '--sol-color-primary-3': '#0d2536',
-    '--sol-color-primary-3-rgb': '13 37 54',
-    '--sol-color-primary-4': '#102a3e',
-    '--sol-color-primary-4-rgb': '16 42 62',
-    '--sol-color-primary-5': '#133047',
-    '--sol-color-primary-5-rgb': '19 48 71',
-    '--sol-color-primary-6': '#16354f',
-    '--sol-color-primary-6-rgb': '22 53 79',
-    '--sol-color-primary-7': '#54adf7',
-    '--sol-color-primary-7-rgb': '84 173 247',
-    '--sol-color-primary-8': '#8fc7f9',
-    '--sol-color-primary-8-rgb': '143 199 249',
-    '--sol-color-neutral-1': '#091219',
-    '--sol-color-neutral-1-rgb': '9 18 25',
-    '--sol-color-neutral-2': '#334048',
-    '--sol-color-neutral-2-rgb': '51 64 72',
-    '--sol-color-neutral-3': '#9fb1bf',
-    '--sol-color-neutral-3-rgb': '159 177 191',
-    '--sol-color-neutral-4': '#edf2f5',
-    '--sol-color-neutral-4-rgb': '237 242 245',
-    '--sol-color-accent-1': '#54adf7',
-    '--sol-color-accent-1-rgb': '84 173 247',
-    '--sol-color-accent-2': '#41a1f5',
-    '--sol-color-accent-2-rgb': '65 161 245',
-    '--sol-color-accent-3': '#6db9f8',
-    '--sol-color-accent-3-rgb': '109 185 248',
-    '--sol-color-positive-1': '#4caf50',
-    '--sol-color-positive-1-rgb': '76 175 80',
-    '--sol-color-positive-2': '#66bb6a',
-    '--sol-color-positive-2-rgb': '102 187 106',
-    '--sol-color-positive-3': '#81c784',
-    '--sol-color-positive-3-rgb': '129 199 132',
-    '--sol-color-notice-1': '#ff9800',
-    '--sol-color-notice-1-rgb': '255 152 0',
-    '--sol-color-notice-2': '#ffa726',
-    '--sol-color-notice-2-rgb': '255 167 38',
-    '--sol-color-notice-3': '#ffb74d',
-    '--sol-color-notice-3-rgb': '255 183 77',
-    '--sol-color-negative-1': '#f44336',
-    '--sol-color-negative-1-rgb': '244 67 54',
-    '--sol-color-negative-2': '#e57373',
-    '--sol-color-negative-2-rgb': '229 115 115',
-    '--sol-color-negative-3': '#ef5350',
-    '--sol-color-negative-3-rgb': '239 83 80',
-    '--sol-color-highlight-1': '#9c27b0',
-    '--sol-color-highlight-1-rgb': '156 39 176',
-    '--sol-color-highlight-2': '#ab47bc',
-    '--sol-color-highlight-2-rgb': '171 71 188',
-    '--sol-color-highlight-3': '#ba68c8',
-    '--sol-color-highlight-3-rgb': '186 104 200',
-    '--sol-color-background': 'var(--sol-color-primary-1)',
-    '--sol-color-focused': 'var(--sol-color-primary-7)',
-    '--sol-color-overlay': 'rgba(var(--sol-color-neutral-1-rgb)/0.7)',
-    '--sol-color-surface-0': 'var(--sol-color-primary-1)',
-    '--sol-color-surface-1': 'var(--sol-color-primary-2)',
-    '--sol-color-surface-2': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-3': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-0-hovered': 'var(--sol-color-primary-2)',
-    '--sol-color-surface-0-pressed': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-1-hovered': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-1-pressed': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-2-hovered': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-2-pressed': 'var(--sol-color-primary-5)',
-    '--sol-color-surface-3-hovered': 'var(--sol-color-primary-5)',
-    '--sol-color-surface-3-pressed': 'var(--sol-color-primary-6)',
-    '--sol-color-interactive': 'var(--sol-color-accent-1)',
-    '--sol-color-interactive-hovered': 'var(--sol-color-accent-3)',
-    '--sol-color-interactive-pressed': 'var(--sol-color-accent-2)',
-    '--sol-color-interactive-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-interactive-opacity': 'rgba(var(--sol-color-neutral-1-rgb)/0)',
-    '--sol-color-interactive-opacity-hovered': 'rgba(var(--sol-color-neutral-1-rgb)/0.4)',
-    '--sol-color-interactive-opacity-pressed': 'rgba(var(--sol-color-neutral-1-rgb)/0.4)',
-    '--sol-color-interactive-opacity-selected': 'rgba(var(--sol-color-neutral-1-rgb)/0.6)',
-    '--sol-color-interactive-negative': 'var(--sol-color-negative-1)',
-    '--sol-color-interactive-negative-hovered': 'var(--sol-color-negative-3)',
-    '--sol-color-interactive-negative-pressed': 'var(--sol-color-negative-2)',
-    '--sol-color-interactive-negative-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-notice': 'var(--sol-color-notice-1)',
-    '--sol-color-interactive-notice-hovered': 'var(--sol-color-notice-3)',
-    '--sol-color-interactive-notice-pressed': 'var(--sol-color-notice-2)',
-    '--sol-color-interactive-notice-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-positive': 'var(--sol-color-positive-1)',
-    '--sol-color-interactive-positive-hovered': 'var(--sol-color-positive-3)',
-    '--sol-color-interactive-positive-pressed': 'var(--sol-color-positive-2)',
-    '--sol-color-interactive-positive-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral-hovered': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral-pressed': 'var(--sol-color-neutral-3)',
-    '--sol-color-interactive-neutral-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-weak-default': 'var(--sol-color-primary-4)',
-    '--sol-color-interactive-weak-hover': 'var(--sol-color-primary-5)',
-    '--sol-color-interactive-weak-pressed': 'var(--sol-color-primary-6)',
-    '--sol-color-interactive-weak-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-status-informative': 'var(--sol-color-primary-7)',
-    '--sol-color-status-informative-fill': 'var(--sol-color-primary-6)',
-    '--sol-color-status-informative-fill-contrast': 'var(--sol-color-neutral-4)',
-    '--sol-color-status-positive': 'var(--sol-color-positive-2)',
-    '--sol-color-status-positive-fill': 'var(--sol-color-positive-1)',
-    '--sol-color-status-positive-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-notice': 'var(--sol-color-notice-3)',
-    '--sol-color-status-notice-fill': 'var(--sol-color-notice-1)',
-    '--sol-color-status-notice-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-negative': 'var(--sol-color-negative-3)',
-    '--sol-color-status-negative-fill': 'var(--sol-color-negative-1)',
-    '--sol-color-status-negative-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-highlight': 'var(--sol-color-highlight-3)',
-    '--sol-color-status-highlight-fill': 'var(--sol-color-highlight-1)',
-    '--sol-color-status-highlight-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-neutral': 'var(--sol-color-neutral-3)',
-    '--sol-color-status-neutral-fill': 'var(--sol-color-neutral-2)',
-    '--sol-color-status-neutral-fill-contrast': 'var(--sol-color-neutral-4)',
-    '--sol-color-foreground': 'var(--sol-color-neutral-4)',
-    '--sol-color-foreground-weak': 'var(--sol-color-primary-8)',
-    '--sol-color-foreground-weaker': 'var(--sol-color-neutral-3)',
-    '--sol-color-foreground-highlight': 'var(--sol-color-primary-7)'
-};
+/**
+ * Open file picker dialog for user to select app.asar file
+ */
+async function browseForAsar() {
+    try {
+        const response = await fetch('/api/browse-for-asar', {
+            method: 'POST'
+        });
+        const data = await response.json();
 
-// C3RB - Custom dark red theme
-const c3rbBaseline = {
-    '--sol-color-primary-1': '#1f1f1f',
-    '--sol-color-primary-1-rgb': '31 31 31',
-    '--sol-color-primary-2': '#212121',
-    '--sol-color-primary-2-rgb': '33 33 33',
-    '--sol-color-primary-3': '#521414',
-    '--sol-color-primary-3-rgb': '82 20 20',
-    '--sol-color-primary-4': '#671919',
-    '--sol-color-primary-4-rgb': '103 25 25',
-    '--sol-color-primary-5': '#ffffff',
-    '--sol-color-primary-5-rgb': '255 255 255',
-    '--sol-color-primary-6': '#a42828',
-    '--sol-color-primary-6-rgb': '164 40 40',
-    '--sol-color-primary-7': '#dc6f6f',
-    '--sol-color-primary-7-rgb': '220 111 111',
-    '--sol-color-primary-8': '#ebadad',
-    '--sol-color-primary-8-rgb': '235 173 173',
-    '--sol-color-neutral-1': '#000',
-    '--sol-color-neutral-1-rgb': '0 0 0',
-    '--sol-color-neutral-2': '#6e6e6e',
-    '--sol-color-neutral-2-rgb': '110 110 110',
-    '--sol-color-neutral-3': '#c0b0b0',
-    '--sol-color-neutral-3-rgb': '192 176 176',
-    '--sol-color-neutral-4': '#fff',
-    '--sol-color-neutral-4-rgb': '255 255 255',
-    '--sol-color-accent-1': '#ff0000',
-    '--sol-color-accent-1-rgb': '255 0 0',
-    '--sol-color-accent-2': '#ff0000',
-    '--sol-color-accent-2-rgb': '255 0 0',
-    '--sol-color-accent-3': '#fa9e9e',
-    '--sol-color-accent-3-rgb': '250 158 158',
-    '--sol-color-positive-1': '#85c6a2',
-    '--sol-color-positive-1-rgb': '133 198 162',
-    '--sol-color-positive-2': '#a8d6bd',
-    '--sol-color-positive-2-rgb': '168 214 189',
-    '--sol-color-positive-3': '#cbe7d8',
-    '--sol-color-positive-3-rgb': '203 231 216',
-    '--sol-color-notice-1': '#e99449',
-    '--sol-color-notice-1-rgb': '233 148 73',
-    '--sol-color-notice-2': '#eeaf77',
-    '--sol-color-notice-2-rgb': '238 175 119',
-    '--sol-color-notice-3': '#f4c9a4',
-    '--sol-color-notice-3-rgb': '244 201 164',
-    '--sol-color-negative-1': '#80aaff',
-    '--sol-color-negative-1-rgb': '128 170 255',
-    '--sol-color-negative-2': '#f99',
-    '--sol-color-negative-2-rgb': '255 153 153',
-    '--sol-color-negative-3': '#ffb3b3',
-    '--sol-color-negative-3-rgb': '255 179 179',
-    '--sol-color-highlight-1': '#8186e4',
-    '--sol-color-highlight-1-rgb': '129 134 228',
-    '--sol-color-highlight-2': '#abafed',
-    '--sol-color-highlight-2-rgb': '171 175 237',
-    '--sol-color-highlight-3': '#d5d7f6',
-    '--sol-color-highlight-3-rgb': '213 215 246',
-    '--sol-color-background': 'var(--sol-color-primary-1)',
-    '--sol-color-focused': 'var(--sol-color-primary-7)',
-    '--sol-color-overlay': 'rgba(var(--sol-color-neutral-1-rgb)/0.7)',
-    '--sol-color-surface-0': 'var(--sol-color-primary-1)',
-    '--sol-color-surface-1': 'var(--sol-color-primary-2)',
-    '--sol-color-surface-2': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-3': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-0-hovered': 'var(--sol-color-primary-2)',
-    '--sol-color-surface-0-pressed': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-1-hovered': 'var(--sol-color-primary-3)',
-    '--sol-color-surface-1-pressed': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-2-hovered': 'var(--sol-color-primary-4)',
-    '--sol-color-surface-2-pressed': 'var(--sol-color-primary-5)',
-    '--sol-color-surface-3-hovered': 'var(--sol-color-primary-5)',
-    '--sol-color-surface-3-pressed': 'var(--sol-color-primary-6)',
-    '--sol-color-interactive': 'var(--sol-color-accent-1)',
-    '--sol-color-interactive-hovered': 'var(--sol-color-accent-3)',
-    '--sol-color-interactive-pressed': 'var(--sol-color-accent-2)',
-    '--sol-color-interactive-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-interactive-opacity': 'rgba(var(--sol-color-neutral-1-rgb)/0)',
-    '--sol-color-interactive-opacity-hovered': 'rgba(var(--sol-color-neutral-1-rgb)/0.4)',
-    '--sol-color-interactive-opacity-pressed': 'rgba(var(--sol-color-neutral-1-rgb)/0.4)',
-    '--sol-color-interactive-opacity-selected': 'rgba(var(--sol-color-neutral-1-rgb)/0.6)',
-    '--sol-color-interactive-negative': 'var(--sol-color-negative-1)',
-    '--sol-color-interactive-negative-hovered': 'var(--sol-color-negative-3)',
-    '--sol-color-interactive-negative-pressed': 'var(--sol-color-negative-2)',
-    '--sol-color-interactive-negative-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-notice': 'var(--sol-color-notice-1)',
-    '--sol-color-interactive-notice-hovered': 'var(--sol-color-notice-3)',
-    '--sol-color-interactive-notice-pressed': 'var(--sol-color-notice-2)',
-    '--sol-color-interactive-notice-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-positive': 'var(--sol-color-positive-1)',
-    '--sol-color-interactive-positive-hovered': 'var(--sol-color-positive-3)',
-    '--sol-color-interactive-positive-pressed': 'var(--sol-color-positive-2)',
-    '--sol-color-interactive-positive-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral-hovered': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-neutral-pressed': 'var(--sol-color-neutral-3)',
-    '--sol-color-interactive-neutral-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-interactive-weak-default': 'var(--sol-color-primary-4)',
-    '--sol-color-interactive-weak-hover': 'var(--sol-color-primary-5)',
-    '--sol-color-interactive-weak-pressed': 'var(--sol-color-primary-6)',
-    '--sol-color-interactive-weak-selected': 'var(--sol-color-neutral-4)',
-    '--sol-color-status-informative': 'var(--sol-color-primary-7)',
-    '--sol-color-status-informative-fill': 'var(--sol-color-primary-6)',
-    '--sol-color-status-informative-fill-contrast': 'var(--sol-color-neutral-4)',
-    '--sol-color-status-positive': 'var(--sol-color-positive-2)',
-    '--sol-color-status-positive-fill': 'var(--sol-color-positive-1)',
-    '--sol-color-status-positive-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-notice': 'var(--sol-color-notice-3)',
-    '--sol-color-status-notice-fill': 'var(--sol-color-notice-1)',
-    '--sol-color-status-notice-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-negative': 'var(--sol-color-negative-3)',
-    '--sol-color-status-negative-fill': 'var(--sol-color-negative-1)',
-    '--sol-color-status-negative-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-highlight': 'var(--sol-color-highlight-3)',
-    '--sol-color-status-highlight-fill': 'var(--sol-color-highlight-1)',
-    '--sol-color-status-highlight-fill-contrast': 'var(--sol-color-neutral-1)',
-    '--sol-color-status-neutral': 'var(--sol-color-neutral-3)',
-    '--sol-color-status-neutral-fill': 'var(--sol-color-neutral-2)',
-    '--sol-color-status-neutral-fill-contrast': 'var(--sol-color-neutral-4)',
-    '--sol-color-foreground': 'var(--sol-color-neutral-4)',
-    '--sol-color-foreground-weak': 'var(--sol-color-primary-8)',
-    '--sol-color-foreground-weaker': 'var(--sol-color-neutral-3)',
-    '--sol-color-foreground-highlight': 'var(--sol-color-primary-7)'
-};
-
-const colorPresets = {
-    'rsi': {
-        colors: rsiOriginal,
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
+        if (data.success && data.path) {
+            DOM.asarPath.value = data.path;
+            
+            // Show success indicator
+            const pathIndicator = document.getElementById('path-success-indicator');
+            if (pathIndicator) pathIndicator.style.display = 'block';
+            
+            // Clear any previous status messages
+            const statusEl = document.getElementById('init-status');
+            if (statusEl) {
+                statusEl.textContent = '';
+                statusEl.style.display = 'none';
+            }
         }
-    },
-    'aegis-dynamics': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#040810',
-            '--sol-color-primary-1-rgb': '4 8 16',
-            '--sol-color-primary-2': '#060c18',
-            '--sol-color-primary-2-rgb': '6 12 24',
-            '--sol-color-primary-3': '#0a1220',
-            '--sol-color-primary-3-rgb': '10 18 32',
-            '--sol-color-primary-4': '#0e1a2e',
-            '--sol-color-primary-4-rgb': '14 26 46',
-            '--sol-color-primary-6': '#16273d',
-            '--sol-color-primary-6-rgb': '22 39 61',
-            '--sol-color-primary-7': '#4169a8',
-            '--sol-color-primary-7-rgb': '65 105 168',
-            '--sol-color-primary-8': '#6b8bc3',
-            '--sol-color-primary-8-rgb': '107 139 195',
-            '--sol-color-accent-1': '#2e5090',
-            '--sol-color-accent-1-rgb': '46 80 144',
-            '--sol-color-accent-2': '#1f3a70',
-            '--sol-color-accent-2-rgb': '31 58 112',
-            '--sol-color-accent-3': '#5578b0',
-            '--sol-color-accent-3-rgb': '85 120 176'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'anvil-aerospace': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#1a1c1e',
-            '--sol-color-primary-1-rgb': '26 28 30',
-            '--sol-color-primary-2': '#22252a',
-            '--sol-color-primary-2-rgb': '34 37 42',
-            '--sol-color-primary-3': '#2a2e34',
-            '--sol-color-primary-3-rgb': '42 46 52',
-            '--sol-color-primary-4': '#35393f',
-            '--sol-color-primary-4-rgb': '53 57 63',
-            '--sol-color-primary-6': '#4a5058',
-            '--sol-color-primary-6-rgb': '74 80 88',
-            '--sol-color-primary-7': '#e84a1f',
-            '--sol-color-primary-7-rgb': '232 74 31',
-            '--sol-color-primary-8': '#ff6b35',
-            '--sol-color-primary-8-rgb': '255 107 53',
-            '--sol-color-accent-1': '#d14520',
-            '--sol-color-accent-1-rgb': '209 69 32',
-            '--sol-color-accent-2': '#b83818',
-            '--sol-color-accent-2-rgb': '184 56 24',
-            '--sol-color-accent-3': '#ff7f4f',
-            '--sol-color-accent-3-rgb': '255 127 79'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'origin-jumpworks': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0c1520',
-            '--sol-color-primary-1-rgb': '12 21 32',
-            '--sol-color-primary-2': '#10212e',
-            '--sol-color-primary-2-rgb': '16 33 46',
-            '--sol-color-primary-3': '#162e42',
-            '--sol-color-primary-3-rgb': '22 46 66',
-            '--sol-color-primary-4': '#1c3a54',
-            '--sol-color-primary-4-rgb': '28 58 84',
-            '--sol-color-primary-6': '#2a5478',
-            '--sol-color-primary-6-rgb': '42 84 120',
-            '--sol-color-primary-7': '#00d4ff',
-            '--sol-color-primary-7-rgb': '0 212 255',
-            '--sol-color-primary-8': '#6ee7ff',
-            '--sol-color-primary-8-rgb': '110 231 255',
-            '--sol-color-accent-1': '#00bfea',
-            '--sol-color-accent-1-rgb': '0 191 234',
-            '--sol-color-accent-2': '#0099cc',
-            '--sol-color-accent-2-rgb': '0 153 204',
-            '--sol-color-accent-3': '#66e0ff',
-            '--sol-color-accent-3-rgb': '102 224 255'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'drake-interplanetary': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0d0d0a',
-            '--sol-color-primary-1-rgb': '13 13 10',
-            '--sol-color-primary-2': '#141410',
-            '--sol-color-primary-2-rgb': '20 20 16',
-            '--sol-color-primary-3': '#1a1a14',
-            '--sol-color-primary-3-rgb': '26 26 20',
-            '--sol-color-primary-4': '#23231c',
-            '--sol-color-primary-4-rgb': '35 35 28',
-            '--sol-color-primary-6': '#3a3a2e',
-            '--sol-color-primary-6-rgb': '58 58 46',
-            '--sol-color-primary-7': '#f5b800',
-            '--sol-color-primary-7-rgb': '245 184 0',
-            '--sol-color-primary-8': '#ffd133',
-            '--sol-color-primary-8-rgb': '255 209 51',
-            '--sol-color-accent-1': '#e6a500',
-            '--sol-color-accent-1-rgb': '230 165 0',
-            '--sol-color-accent-2': '#cc8800',
-            '--sol-color-accent-2-rgb': '204 136 0',
-            '--sol-color-accent-3': '#ffc933',
-            '--sol-color-accent-3-rgb': '255 201 51'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'crusader-industries': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0a1419',
-            '--sol-color-primary-1-rgb': '10 20 25',
-            '--sol-color-primary-2': '#0e1e26',
-            '--sol-color-primary-2-rgb': '14 30 38',
-            '--sol-color-primary-3': '#14282f',
-            '--sol-color-primary-3-rgb': '20 40 47',
-            '--sol-color-primary-4': '#1a3641',
-            '--sol-color-primary-4-rgb': '26 54 65',
-            '--sol-color-primary-6': '#265968',
-            '--sol-color-primary-6-rgb': '38 89 104',
-            '--sol-color-primary-7': '#10d9c5',
-            '--sol-color-primary-7-rgb': '16 217 197',
-            '--sol-color-primary-8': '#5ce8d8',
-            '--sol-color-primary-8-rgb': '92 232 216',
-            '--sol-color-accent-1': '#0ec4b0',
-            '--sol-color-accent-1-rgb': '14 196 176',
-            '--sol-color-accent-2': '#0a9e8a',
-            '--sol-color-accent-2-rgb': '10 158 138',
-            '--sol-color-accent-3': '#7ff0e0',
-            '--sol-color-accent-3-rgb': '127 240 224'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'misc': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0f1208',
-            '--sol-color-primary-1-rgb': '15 18 8',
-            '--sol-color-primary-2': '#14180d',
-            '--sol-color-primary-2-rgb': '20 24 13',
-            '--sol-color-primary-3': '#1a2012',
-            '--sol-color-primary-3-rgb': '26 32 18',
-            '--sol-color-primary-4': '#23291a',
-            '--sol-color-primary-4-rgb': '35 41 26',
-            '--sol-color-primary-6': '#3a4228',
-            '--sol-color-primary-6-rgb': '58 66 40',
-            '--sol-color-primary-7': '#9fdf3f',
-            '--sol-color-primary-7-rgb': '159 223 63',
-            '--sol-color-primary-8': '#bef55e',
-            '--sol-color-primary-8-rgb': '190 245 94',
-            '--sol-color-accent-1': '#8bc832',
-            '--sol-color-accent-1-rgb': '139 200 50',
-            '--sol-color-accent-2': '#6ea326',
-            '--sol-color-accent-2-rgb': '110 163 38',
-            '--sol-color-accent-3': '#c4f76f',
-            '--sol-color-accent-3-rgb': '196 247 111'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'consolidated-outland': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#12100d',
-            '--sol-color-primary-1-rgb': '18 16 13',
-            '--sol-color-primary-2': '#1a1612',
-            '--sol-color-primary-2-rgb': '26 22 18',
-            '--sol-color-primary-3': '#221e19',
-            '--sol-color-primary-3-rgb': '34 30 25',
-            '--sol-color-primary-4': '#2d2820',
-            '--sol-color-primary-4-rgb': '45 40 32',
-            '--sol-color-primary-6': '#473f32',
-            '--sol-color-primary-6-rgb': '71 63 50',
-            '--sol-color-primary-7': '#ff8c42',
-            '--sol-color-primary-7-rgb': '255 140 66',
-            '--sol-color-primary-8': '#ffa666',
-            '--sol-color-primary-8-rgb': '255 166 102',
-            '--sol-color-accent-1': '#f57730',
-            '--sol-color-accent-1-rgb': '245 119 48',
-            '--sol-color-accent-2': '#d66225',
-            '--sol-color-accent-2-rgb': '214 98 37',
-            '--sol-color-accent-3': '#ffb580',
-            '--sol-color-accent-3-rgb': '255 181 128'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'banu': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0d0a12',
-            '--sol-color-primary-1-rgb': '13 10 18',
-            '--sol-color-primary-2': '#140f1c',
-            '--sol-color-primary-2-rgb': '20 15 28',
-            '--sol-color-primary-3': '#1c1426',
-            '--sol-color-primary-3-rgb': '28 20 38',
-            '--sol-color-primary-4': '#261c33',
-            '--sol-color-primary-4-rgb': '38 28 51',
-            '--sol-color-primary-6': '#3d2b52',
-            '--sol-color-primary-6-rgb': '61 43 82',
-            '--sol-color-primary-7': '#a855f7',
-            '--sol-color-primary-7-rgb': '168 85 247',
-            '--sol-color-primary-8': '#c084fc',
-            '--sol-color-primary-8-rgb': '192 132 252',
-            '--sol-color-accent-1': '#9333ea',
-            '--sol-color-accent-1-rgb': '147 51 234',
-            '--sol-color-accent-2': '#7e22ce',
-            '--sol-color-accent-2-rgb': '126 34 206',
-            '--sol-color-accent-3': '#d8b4fe',
-            '--sol-color-accent-3-rgb': '216 180 254'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'esperia': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0d100e',
-            '--sol-color-primary-1-rgb': '13 16 14',
-            '--sol-color-primary-2': '#141a16',
-            '--sol-color-primary-2-rgb': '20 26 22',
-            '--sol-color-primary-3': '#1b241f',
-            '--sol-color-primary-3-rgb': '27 36 31',
-            '--sol-color-primary-4': '#253029',
-            '--sol-color-primary-4-rgb': '37 48 41',
-            '--sol-color-primary-6': '#3a4a3f',
-            '--sol-color-primary-6-rgb': '58 74 63',
-            '--sol-color-primary-7': '#34d399',
-            '--sol-color-primary-7-rgb': '52 211 153',
-            '--sol-color-primary-8': '#6ee7b7',
-            '--sol-color-primary-8-rgb': '110 231 183',
-            '--sol-color-accent-1': '#10b981',
-            '--sol-color-accent-1-rgb': '16 185 129',
-            '--sol-color-accent-2': '#059669',
-            '--sol-color-accent-2-rgb': '5 150 105',
-            '--sol-color-accent-3': '#86efac',
-            '--sol-color-accent-3-rgb': '134 239 172'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'kruger': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0f0d12',
-            '--sol-color-primary-1-rgb': '15 13 18',
-            '--sol-color-primary-2': '#17141c',
-            '--sol-color-primary-2-rgb': '23 20 28',
-            '--sol-color-primary-3': '#201c26',
-            '--sol-color-primary-3-rgb': '32 28 38',
-            '--sol-color-primary-4': '#2b2533',
-            '--sol-color-primary-4-rgb': '43 37 51',
-            '--sol-color-primary-6': '#453a52',
-            '--sol-color-primary-6-rgb': '69 58 82',
-            '--sol-color-primary-7': '#e879f9',
-            '--sol-color-primary-7-rgb': '232 121 249',
-            '--sol-color-primary-8': '#f0abfc',
-            '--sol-color-primary-8-rgb': '240 171 252',
-            '--sol-color-accent-1': '#d946ef',
-            '--sol-color-accent-1-rgb': '217 70 239',
-            '--sol-color-accent-2': '#c026d3',
-            '--sol-color-accent-2-rgb': '192 38 211',
-            '--sol-color-accent-3': '#f5d0fe',
-            '--sol-color-accent-3-rgb': '245 208 254'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'argo': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#12100a',
-            '--sol-color-primary-1-rgb': '18 16 10',
-            '--sol-color-primary-2': '#1a160e',
-            '--sol-color-primary-2-rgb': '26 22 14',
-            '--sol-color-primary-3': '#241f14',
-            '--sol-color-primary-3-rgb': '36 31 20',
-            '--sol-color-primary-4': '#2f291c',
-            '--sol-color-primary-4-rgb': '47 41 28',
-            '--sol-color-primary-6': '#4a3f2b',
-            '--sol-color-primary-6-rgb': '74 63 43',
-            '--sol-color-primary-7': '#fbbf24',
-            '--sol-color-primary-7-rgb': '251 191 36',
-            '--sol-color-primary-8': '#fcd34d',
-            '--sol-color-primary-8-rgb': '252 211 77',
-            '--sol-color-accent-1': '#f59e0b',
-            '--sol-color-accent-1-rgb': '245 158 11',
-            '--sol-color-accent-2': '#d97706',
-            '--sol-color-accent-2-rgb': '217 119 6',
-            '--sol-color-accent-3': '#fde68a',
-            '--sol-color-accent-3-rgb': '253 230 138'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'aopoa': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0a0f14',
-            '--sol-color-primary-1-rgb': '10 15 20',
-            '--sol-color-primary-2': '#0f161f',
-            '--sol-color-primary-2-rgb': '15 22 31',
-            '--sol-color-primary-3': '#141e2b',
-            '--sol-color-primary-3-rgb': '20 30 43',
-            '--sol-color-primary-4': '#1c2938',
-            '--sol-color-primary-4-rgb': '28 41 56',
-            '--sol-color-primary-6': '#2d4254',
-            '--sol-color-primary-6-rgb': '45 66 84',
-            '--sol-color-primary-7': '#22d3ee',
-            '--sol-color-primary-7-rgb': '34 211 238',
-            '--sol-color-primary-8': '#67e8f9',
-            '--sol-color-primary-8-rgb': '103 232 249',
-            '--sol-color-accent-1': '#06b6d4',
-            '--sol-color-accent-1-rgb': '6 182 212',
-            '--sol-color-accent-2': '#0891b2',
-            '--sol-color-accent-2-rgb': '8 145 178',
-            '--sol-color-accent-3': '#a5f3fc',
-            '--sol-color-accent-3-rgb': '165 243 252'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'tumbril': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#100d08',
-            '--sol-color-primary-1-rgb': '16 13 8',
-            '--sol-color-primary-2': '#18140d',
-            '--sol-color-primary-2-rgb': '24 20 13',
-            '--sol-color-primary-3': '#221c12',
-            '--sol-color-primary-3-rgb': '34 28 18',
-            '--sol-color-primary-4': '#2d251a',
-            '--sol-color-primary-4-rgb': '45 37 26',
-            '--sol-color-primary-6': '#473a28',
-            '--sol-color-primary-6-rgb': '71 58 40',
-            '--sol-color-primary-7': '#92400e',
-            '--sol-color-primary-7-rgb': '146 64 14',
-            '--sol-color-primary-8': '#c2630a',
-            '--sol-color-primary-8-rgb': '194 99 10',
-            '--sol-color-accent-1': '#78350f',
-            '--sol-color-accent-1-rgb': '120 53 15',
-            '--sol-color-accent-2': '#57210c',
-            '--sol-color-accent-2-rgb': '87 33 12',
-            '--sol-color-accent-3': '#ea8a0e',
-            '--sol-color-accent-3-rgb': '234 138 14'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'greycat': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#12120f',
-            '--sol-color-primary-1-rgb': '18 18 15',
-            '--sol-color-primary-2': '#1a1a16',
-            '--sol-color-primary-2-rgb': '26 26 22',
-            '--sol-color-primary-3': '#23231e',
-            '--sol-color-primary-3-rgb': '35 35 30',
-            '--sol-color-primary-4': '#2e2e27',
-            '--sol-color-primary-4-rgb': '46 46 39',
-            '--sol-color-primary-6': '#48483d',
-            '--sol-color-primary-6-rgb': '72 72 61',
-            '--sol-color-primary-7': '#71717a',
-            '--sol-color-primary-7-rgb': '113 113 122',
-            '--sol-color-primary-8': '#a1a1aa',
-            '--sol-color-primary-8-rgb': '161 161 170',
-            '--sol-color-accent-1': '#52525b',
-            '--sol-color-accent-1-rgb': '82 82 91',
-            '--sol-color-accent-2': '#3f3f46',
-            '--sol-color-accent-2-rgb': '63 63 70',
-            '--sol-color-accent-3': '#d4d4d8',
-            '--sol-color-accent-3-rgb': '212 212 216'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'vanduul': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#140505',
-            '--sol-color-primary-1-rgb': '20 5 5',
-            '--sol-color-primary-2': '#1c0808',
-            '--sol-color-primary-2-rgb': '28 8 8',
-            '--sol-color-primary-3': '#260c0c',
-            '--sol-color-primary-3-rgb': '38 12 12',
-            '--sol-color-primary-4': '#331111',
-            '--sol-color-primary-4-rgb': '51 17 17',
-            '--sol-color-primary-6': '#4d1a1a',
-            '--sol-color-primary-6-rgb': '77 26 26',
-            '--sol-color-primary-7': '#dc2626',
-            '--sol-color-primary-7-rgb': '220 38 38',
-            '--sol-color-primary-8': '#f87171',
-            '--sol-color-primary-8-rgb': '248 113 113',
-            '--sol-color-accent-1': '#b91c1c',
-            '--sol-color-accent-1-rgb': '185 28 28',
-            '--sol-color-accent-2': '#991b1b',
-            '--sol-color-accent-2-rgb': '153 27 27',
-            '--sol-color-accent-3': '#fca5a5',
-            '--sol-color-accent-3-rgb': '252 165 165'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'gatac': {
-        colors: {
-            ...rsiOriginal,
-            '--sol-color-primary-1': '#0d0f0a',
-            '--sol-color-primary-1-rgb': '13 15 10',
-            '--sol-color-primary-2': '#14180e',
-            '--sol-color-primary-2-rgb': '20 24 14',
-            '--sol-color-primary-3': '#1c2214',
-            '--sol-color-primary-3-rgb': '28 34 20',
-            '--sol-color-primary-4': '#262d1c',
-            '--sol-color-primary-4-rgb': '38 45 28',
-            '--sol-color-primary-6': '#3d462c',
-            '--sol-color-primary-6-rgb': '61 70 44',
-            '--sol-color-primary-7': '#84cc16',
-            '--sol-color-primary-7-rgb': '132 204 22',
-            '--sol-color-primary-8': '#a3e635',
-            '--sol-color-primary-8-rgb': '163 230 53',
-            '--sol-color-accent-1': '#65a30d',
-            '--sol-color-accent-1-rgb': '101 163 13',
-            '--sol-color-accent-2': '#4d7c0f',
-            '--sol-color-accent-2-rgb': '77 124 15',
-            '--sol-color-accent-3': '#bef264',
-            '--sol-color-accent-3-rgb': '190 242 100'
-        },
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
-    },
-    'c3rb': {
-        colors: c3rbBaseline,
-        media: {
-            logo: 'assets/logos/cig-logo.svg',
-            background: 'assets/images/sc_bg_fallback.jpg'
-        }
+    } catch (error) {
+        console.error('Error browsing for asar:', error);
     }
-};
-
-// Initialize state.colors with RSI Original as default
-state.colors = { ...rsiOriginal };
-
-// Initialize state.media with default launcher media
-state.media = {
-    logo: 'assets/logos/cig-logo.svg',
-    background: 'assets/images/sc_bg_fallback.jpg'
-};
+}
 
 /**
  * Auto-detect RSI Launcher installation
@@ -1112,29 +466,54 @@ state.media = {
 async function detectLauncher(options = {}) {
     const { autoInit = false, silentFailure = false } = options;
 
-    if (!silentFailure) {
-        showStatus('init-status', 'Detecting RSI Launcher...', 'info');
-    }
-
     try {
+        console.log('[detectLauncher] Fetching /api/detect-launcher');
         const response = await fetch('/api/detect-launcher');
         const data = await response.json();
+
+        console.log('[detectLauncher] Response:', data);
 
         if (!response.ok) {
             throw new Error(data.error || data.message || 'Launcher not found');
         }
 
+        console.log('[detectLauncher] Setting path to:', data.launcher.asarPath);
         DOM.asarPath.value = data.launcher.asarPath;
-        showStatus('init-status', '✓ Installation path detected. Click "Initialize" to continue.', 'success');
+        
+        // Show success indicator next to path field
+        const pathIndicator = document.getElementById('path-success-indicator');
+        if (pathIndicator) pathIndicator.style.display = 'block';
+        
+        // Clear any previous status messages - hide the status element completely
+        const statusEl = document.getElementById('init-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.style.display = 'none';
+        }
 
         if (autoInit) {
             await initSession();
         }
 
     } catch (error) {
+        console.error('[detectLauncher] Error:', error.message);
         if (!silentFailure) {
             showStatus('init-status', error.message, 'error');
         }
+    }
+}
+
+/**
+ * Check if RSI Launcher is currently running
+ */
+async function checkLauncherRunning() {
+    try {
+        const response = await fetch('/api/launcher-status');
+        const data = await response.json();
+        return data.isRunning || false;
+    } catch (error) {
+        console.error('Error checking launcher status:', error);
+        return false;
     }
 }
 
@@ -1146,6 +525,15 @@ async function initSession() {
     
     if (!asarPath) {
         showStatus('init-status', 'Please enter asar path', 'error');
+        return;
+    }
+
+    // Check if RSI Launcher is running
+    showStatus('init-status', 'Checking launcher status...', 'info');
+    const launcherRunning = await checkLauncherRunning();
+    
+    if (launcherRunning) {
+        showStatus('init-status', '⚠️ RSI Launcher is currently running. Please close it before proceeding, then try again.', 'error');
         return;
     }
 
@@ -1165,6 +553,17 @@ async function initSession() {
         }
 
         state.initialized = true;
+        
+        // Turn initialize button green with success icon
+        const initBtn = document.getElementById('init-btn');
+        if (initBtn) {
+            initBtn.style.background = 'linear-gradient(135deg, rgba(100, 200, 100, 0.3), rgba(80, 180, 80, 0.2))';
+            initBtn.style.borderColor = '#64c864';
+            initBtn.style.color = '#64c864';
+            initBtn.style.boxShadow = '0 0 15px rgba(100, 200, 100, 0.4)';
+            initBtn.innerHTML = '✓';
+        }
+        
         showStatus('init-status', '✓ Initialized successfully. Click "Next" to continue.', 'success');
         
         // Load extracted list but don't auto-navigate
@@ -1228,7 +627,10 @@ async function extractAsar() {
     const extractButton = document.getElementById('extract-btn');
     if (extractButton) extractButton.disabled = true;
 
-    showStatus('extract-status', 'Extracting app.asar...', 'info');
+    // Hide status, only show progress bar
+    const statusEl = document.getElementById('extract-status');
+    if (statusEl) statusEl.style.display = 'none';
+    
     setExtractProgress(true, 5, 'Starting extraction...');
     startExtractPolling();
 
@@ -1254,9 +656,12 @@ async function extractAsar() {
         setExtractProgress(true, 100, 'Extraction complete');
         showStatus('extract-status', '✓ Extracted successfully', 'success');
         
-        // Navigate to Colors page (page 3)
+        // Reload the extracted ASAR list to show the new extraction
+        await loadExtractedASARList();
+        
+        // Navigate to Colors page (page 2)
         setTimeout(() => {
-            navigateToPage(3);
+            navigateToPage(2);
             document.getElementById('extract-status').style.display = 'none';
         }, 500);
 
@@ -1392,11 +797,292 @@ async function useSelectedExtract() {
         }
 
         setTimeout(() => {
-            navigateToPage(3);
+            navigateToPage(2);
             document.getElementById('extract-status').style.display = 'none';
         }, 500);
     } catch (error) {
         showStatus('extract-status', error.message, 'error');
+    }
+}
+
+/**
+ * Load and display backups list
+ */
+async function loadBackupsList() {
+    const backupsList = document.getElementById('backupsList');
+    if (!backupsList) return;
+
+    try {
+        const response = await fetch('/api/backups');
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load backups');
+        }
+
+        const backups = data.backups || [];
+
+        if (backups.length === 0) {
+            backupsList.innerHTML = '<div class="backup-item-empty">No backups yet. Create one to get started.</div>';
+            return;
+        }
+
+        backupsList.innerHTML = '';
+        backups.forEach((backup) => {
+            const backupDiv = document.createElement('div');
+            backupDiv.className = 'backup-item';
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'backup-item-info';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'backup-item-name';
+            nameDiv.textContent = backup.name || 'Backup';
+            
+            const dateDiv = document.createElement('div');
+            dateDiv.className = 'backup-item-date';
+            dateDiv.textContent = new Date(backup.date).toLocaleString();
+            
+            infoDiv.appendChild(nameDiv);
+            infoDiv.appendChild(dateDiv);
+            
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'backup-item-actions';
+            
+            const restoreBtn = document.createElement('button');
+            restoreBtn.className = 'btn btn-secondary';
+            restoreBtn.textContent = '↻ Restore';
+            restoreBtn.onclick = () => restoreBackup(backup.id || backup.name);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-secondary';
+            deleteBtn.textContent = '✕ Delete';
+            deleteBtn.onclick = () => deleteBackup(backup.id || backup.name);
+            
+            actionsDiv.appendChild(restoreBtn);
+            actionsDiv.appendChild(deleteBtn);
+            
+            backupDiv.appendChild(infoDiv);
+            backupDiv.appendChild(actionsDiv);
+            backupsList.appendChild(backupDiv);
+        });
+    } catch (error) {
+        console.error('Error loading backups:', error);
+        backupsList.innerHTML = `<div class="backup-item-empty">Error: ${error.message}</div>`;
+    }
+}
+
+/**
+ * Create a new backup
+ */
+async function createNewBackup() {
+    if (!state.initialized) {
+        showStatus('init-status', 'Please initialize a session first', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/backups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: `Backup - ${new Date().toLocaleString()}`
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to create backup');
+        }
+
+        showStatus('init-status', '✓ Backup created successfully', 'success');
+        await loadBackupsList();
+    } catch (error) {
+        showStatus('init-status', error.message, 'error');
+    }
+}
+
+/**
+ * Restore a backup
+ */
+async function restoreBackup(backupId) {
+    if (!confirm('Are you sure you want to restore this backup? Current changes will be overwritten.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/backups/${backupId}/restore`, {
+            method: 'POST'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to restore backup');
+        }
+
+        showStatus('init-status', '✓ Backup restored successfully', 'success');
+        await loadBackupsList();
+    } catch (error) {
+        showStatus('init-status', error.message, 'error');
+    }
+}
+
+/**
+ * Delete a backup
+ */
+async function deleteBackup(backupId) {
+    if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/backups/${backupId}`, {
+            method: 'DELETE'
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete backup');
+        }
+
+        showStatus('init-status', '✓ Backup deleted successfully', 'success');
+        await loadBackupsList();
+    } catch (error) {
+        showStatus('init-status', error.message, 'error');
+    }
+}
+
+/**
+ * Load and display extracted ASAR list
+ */
+async function loadExtractedASARList() {
+    const extractsList = document.getElementById('extractsList');
+    if (!extractsList) {
+        console.log('extractsList element not found');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/extracted-list');
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load extractions');
+        }
+
+        const extracts = data.extracts || [];
+
+        if (extracts.length === 0) {
+            extractsList.innerHTML = '<div class="extract-item-empty">No extracted ASARs yet. Extract one to get started.</div>';
+            return;
+        }
+
+        extractsList.innerHTML = '';
+        extracts.forEach((extract) => {
+            const extractDiv = document.createElement('div');
+            extractDiv.className = 'extract-item';
+            
+            const infoDiv = document.createElement('div');
+            infoDiv.className = 'extract-item-info';
+            
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'extract-item-name';
+            nameDiv.textContent = extract.name || 'Extraction';
+            
+            const dateDiv = document.createElement('div');
+            dateDiv.className = 'extract-item-date';
+            dateDiv.textContent = `Extracted: ${extract.date}`;
+            
+            infoDiv.appendChild(nameDiv);
+            infoDiv.appendChild(dateDiv);
+            
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'extract-item-actions';
+            
+            const useBtn = document.createElement('button');
+            useBtn.className = 'btn btn-secondary';
+            useBtn.textContent = '↻ Use';
+            useBtn.title = 'Load this extraction';
+            useBtn.onclick = () => useExtractedASAR(extract.path);
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'btn btn-secondary';
+            deleteBtn.textContent = '✕ Delete';
+            deleteBtn.title = 'Delete this extraction';
+            deleteBtn.onclick = () => deleteExtractedASAR(extract.path, extract.name);
+            
+            actionsDiv.appendChild(useBtn);
+            actionsDiv.appendChild(deleteBtn);
+            
+            extractDiv.appendChild(infoDiv);
+            extractDiv.appendChild(actionsDiv);
+            extractsList.appendChild(extractDiv);
+        });
+    } catch (error) {
+        console.error('Error loading extracted ASAR list:', error);
+        extractsList.innerHTML = `<div class="extract-item-empty">Error: ${error.message}</div>`;
+    }
+}
+
+/**
+ * Use an extracted ASAR folder
+ */
+async function useExtractedASAR(path) {
+    showStatus('init-status', 'Loading extracted ASAR...', 'info');
+
+    try {
+        const response = await fetch('/api/use-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to load extraction');
+        }
+
+        state.initialized = true;
+        state.extractedPath = data.extractedPath;
+        
+        showStatus('init-status', '✓ Extracted ASAR loaded successfully. Click "Next" to continue.', 'success');
+        
+        // Reload the list to show current selection
+        await loadExtractedASARList();
+    } catch (error) {
+        showStatus('init-status', error.message, 'error');
+    }
+}
+
+/**
+ * Delete an extracted ASAR folder
+ */
+async function deleteExtractedASAR(path, name) {
+    if (!confirm(`Are you sure you want to delete the extracted ASAR "${name}"? This will remove all files in this extraction. This cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/delete-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to delete extraction');
+        }
+
+        showStatus('init-status', '✓ Extracted ASAR deleted successfully', 'success');
+        await loadExtractedASARList();
+    } catch (error) {
+        showStatus('init-status', error.message, 'error');
     }
 }
 
@@ -1409,26 +1095,36 @@ function handlePresetChange(presetName) {
 }
 
 function applyPreset(presetName) {
-    const preset = colorPresets[presetName];
-    
-    if (!preset) {
-        showStatus('colors-status', 'Preset not found', 'error');
-        return;
-    }
+    try {
+        const preset = colorPresets[presetName];
+        
+        if (!preset) {
+            showStatus('colors-status', 'Preset not found', 'error');
+            return;
+        }
 
-    showStatus('colors-status', `Applying ${presetName} preset...`, 'info');
-    state.colors = { ...preset.colors || preset };
-    
-    // Update media if preset includes it
-    if (preset.media) {
-        state.media = { ...preset.media };
-        updatePreviewMedia(preset.media);
+        showStatus('colors-status', `Applying ${presetName} preset...`, 'info');
+
+        const presetColors = preset.colors && typeof preset.colors === 'object'
+            ? preset.colors
+            : (typeof preset === 'object' ? preset : {});
+
+        state.colors = { ...presetColors };
+        
+        // Update media if preset includes it
+        if (preset.media && typeof preset.media === 'object') {
+            state.media = { ...preset.media };
+            updatePreviewMedia(preset.media);
+        }
+        
+        // Defer rendering to avoid blocking
+        setTimeout(() => {
+            renderColorMappings();
+        }, 0);
+    } catch (error) {
+        console.error('Preset apply failed:', error);
+        showStatus('colors-status', 'Failed to apply preset. Please try again.', 'error');
     }
-    
-    // Defer rendering to avoid blocking
-    setTimeout(() => {
-        renderColorMappings();
-    }, 0);
 }
 
 /**
@@ -1469,7 +1165,7 @@ function addColorMapping() {
 
     attachColorControlListeners(item);
     item.querySelectorAll('.old-color').forEach((input) => {
-        input.addEventListener('input', updatePreviewFromUi);
+        input.addEventListener('input', debouncedUpdatePreview);
     });
     setColorControls(item, '#888888');
 }
@@ -1505,6 +1201,11 @@ function getColorSection(colorName) {
 function renderColorMappings() {
     if (!DOM.colorList) return;
     DOM.colorList.innerHTML = '';
+
+    if (!state.colors || typeof state.colors !== 'object') {
+        showStatus('colors-status', 'No color data available', 'error');
+        return;
+    }
 
     // Group colors by section
     const sections = {};
@@ -1588,18 +1289,39 @@ function renderColorMappings() {
             
             item.innerHTML = `
                 ${categoryLabel}
-                <input type="text" class="old-color" value="${oldColor}" placeholder="Old color" readonly>
-                <div class="color-preview" style="background: ${newColor};" onclick="pickColor(this)"></div>
-                <input type="text" class="new-color" value="${newColor}" placeholder="New color">
-                <div class="color-tuning">
-                    <div class="color-inputs">
-                        <input type="text" class="hex-input" placeholder="HEX" maxlength="7" value="${normalizeColorToHex(newColor) || '#888888'}">
-                        <input type="text" class="rgb-input" placeholder="RGB">
-                    </div>
-                    <button class="color-picker-button" type="button">🎨 Color Wheel</button>
-                    <input type="color" class="color-wheel-hidden" value="${normalizeColorToHex(newColor) || '#888888'}" aria-label="Color wheel" style="display: none;">
+                <div class="color-grid-item">
+                    <div class="color-label">${oldColor}</div>
+                    <div class="color-preview" style="background: ${newColor};" onclick="selectColorForEditing(this, '${id}')" data-color-id="${id}"></div>
                 </div>
-                <button class="remove-btn" onclick="removeColorMapping('${id}')">Remove</button>
+                <div class="color-editor" id="editor-${id}" style="display: none;">
+                    <div class="color-controls-layout">
+                        <div class="color-text-fields">
+                            <div class="color-input-group">
+                                <label>HEX</label>
+                                <input type="text" class="hex-input" placeholder="#000000" maxlength="7" value="${normalizeColorToHex(newColor) || '#888888'}">
+                            </div>
+                            <div class="color-input-group">
+                                <label>R</label>
+                                <input type="number" class="rgb-r" min="0" max="255" value="136">
+                            </div>
+                            <div class="color-input-group">
+                                <label>G</label>
+                                <input type="number" class="rgb-g" min="0" max="255" value="136">
+                            </div>
+                            <div class="color-input-group">
+                                <label>B</label>
+                                <input type="number" class="rgb-b" min="0" max="255" value="136">
+                            </div>
+                        </div>
+                        <div class="color-wheel-container">
+                            <input type="color" class="color-wheel" value="${normalizeColorToHex(newColor) || '#888888'}" aria-label="Color wheel">
+                        </div>
+                    </div>
+                    <input type="hidden" class="old-color" value="${oldColor}">
+                    <input type="hidden" class="new-color" value="${newColor}">
+                    <button class="btn btn-secondary btn-sm" onclick="closeColorEditor('${id}')">Done</button>
+                    <button class="remove-btn" onclick="removeColorMapping('${id}')">Remove</button>
+                </div>
             `;
             
             fragment.appendChild(item);
@@ -1623,6 +1345,11 @@ function renderColorMappings() {
     let setupIndex = 0;
     const CHUNK_SIZE = 10; // Process 10 items per frame
     const totalItems = itemsToSetup.length;
+
+    if (totalItems === 0) {
+        showStatus('colors-status', 'No colors to display', 'error');
+        return;
+    }
     
     function setupNextChunk() {
         const endIndex = Math.min(setupIndex + CHUNK_SIZE, totalItems);
@@ -1637,7 +1364,7 @@ function renderColorMappings() {
             attachColorControlListeners(item);
             const oldColorInputs = item.querySelectorAll('.old-color');
             for (let j = 0; j < oldColorInputs.length; j++) {
-                oldColorInputs[j].addEventListener('input', updatePreviewFromUi);
+                oldColorInputs[j].addEventListener('input', debouncedUpdatePreview);
             }
             setColorControls(item, normalizeColorToHex(newColor) || '#888888');
         }
@@ -1646,7 +1373,7 @@ function renderColorMappings() {
         
         // Schedule next chunk or finalize
         if (setupIndex < totalItems) {
-            setTimeout(setupNextChunk, 0);
+            requestAnimationFrame(setupNextChunk);
         } else {
             // All setup done, update preview and show success
             updatePreviewFromColors(state.colors);
@@ -1656,7 +1383,7 @@ function renderColorMappings() {
     
     // Start setup process with initial message
     showStatus('colors-status', 'Loading colors... 0%', 'info');
-    setTimeout(setupNextChunk, 0);
+    requestAnimationFrame(setupNextChunk);
 }
 
 /**
@@ -1664,8 +1391,10 @@ function renderColorMappings() {
  */
 function toggleColorSection(sectionId) {
     const section = document.getElementById(sectionId);
+    if (!section) return;
     const content = section.querySelector('.color-section-content');
     const toggle = section.querySelector('.color-section-toggle');
+    if (!content || !toggle) return;
     const arrow = toggle.querySelector('.toggle-arrow');
     
     const isExpanded = content.style.display !== 'none';
@@ -1740,6 +1469,77 @@ function rgbToHex(rgb) {
 }
 
 /**
+ * Select a color for editing - show the color editor
+ */
+function selectColorForEditing(previewElement, colorId) {
+    // Close all other open editors
+    document.querySelectorAll('.color-editor').forEach(editor => {
+        if (editor.id !== `editor-${colorId}`) {
+            editor.style.display = 'none';
+        }
+    });
+    
+    // Toggle this editor
+    const editor = document.getElementById(`editor-${colorId}`);
+    if (editor) {
+        const isVisible = editor.style.display === 'flex';
+        editor.style.display = isVisible ? 'none' : 'flex';
+        
+        if (!isVisible) {
+            // Initialize RGB inputs from hex value
+            const hexInput = editor.querySelector('.hex-input');
+            if (hexInput && hexInput.value) {
+                updateRGBFromHex(editor, hexInput.value);
+            }
+        }
+    }
+}
+
+/**
+ * Close the color editor
+ */
+function closeColorEditor(colorId) {
+    const editor = document.getElementById(`editor-${colorId}`);
+    if (editor) {
+        editor.style.display = 'none';
+    }
+}
+
+/**
+ * Update RGB inputs from hex value
+ */
+function updateRGBFromHex(editor, hexValue) {
+    const hex = hexValue.replace('#', '');
+    if (hex.length === 6) {
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        
+        const rInput = editor.querySelector('.rgb-r');
+        const gInput = editor.querySelector('.rgb-g');
+        const bInput = editor.querySelector('.rgb-b');
+        
+        if (rInput) rInput.value = r;
+        if (gInput) gInput.value = g;
+        if (bInput) bInput.value = b;
+    }
+}
+
+/**
+ * Update hex from RGB values
+ */
+function updateHexFromRGB(editor) {
+    const r = parseInt(editor.querySelector('.rgb-r')?.value || 0);
+    const g = parseInt(editor.querySelector('.rgb-g')?.value || 0);
+    const b = parseInt(editor.querySelector('.rgb-b')?.value || 0);
+    
+    const hexInput = editor.querySelector('.hex-input');
+    if (hexInput) {
+        hexInput.value = rgbToHex(r, g, b);
+    }
+}
+
+/**
  * Open color wheel picker
  */
 function openColorPicker(event) {
@@ -1782,9 +1582,26 @@ async function applyColors() {
         return;
     }
 
-    showStatus('colors-status', 'Applying colors...', 'info');
+    console.log('Applying colors:', colors);
+
+    // Show progress bar
+    const statusEl = document.getElementById('colors-status');
+    if (statusEl && !statusEl.querySelector('.progress-bar-wrapper')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'progress-bar-wrapper';
+        wrapper.innerHTML = `
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="colors-progress-bar" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text" id="colors-progress-text" style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #8db4d0;">Starting color application...</div>
+        `;
+        statusEl.innerHTML = '';
+        statusEl.appendChild(wrapper);
+        statusEl.style.display = 'block';
+    }
 
     try {
+        // Start the async operation
         const response = await fetch('/api/apply-colors', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1797,13 +1614,92 @@ async function applyColors() {
             throw new Error(data.error || 'Failed to apply colors');
         }
 
-        state.config.colors = colors;
-        showStatus('colors-status', '✓ Colors applied successfully', 'success');
-        updatePreviewFromColors(colors);
+        console.log('Color application response:', data);
+
+        // If it's async, poll for status
+        if (data.async) {
+            await pollOperationStatus('apply-colors', 'colors-status', (status) => {
+                if (status.state === 'done') {
+                    state.config.colors = colors;
+                    updatePreviewFromColors(colors);
+                }
+            });
+        } else {
+            // Synchronous response (legacy)
+            state.config.colors = colors;
+            showStatus('colors-status', '✓ Colors applied successfully', 'success');
+            updatePreviewFromColors(colors);
+        }
 
     } catch (error) {
+        console.error('Color application error:', error);
         showStatus('colors-status', error.message, 'error');
     }
+}
+
+/**
+ * Poll for operation status
+ */
+async function pollOperationStatus(operation, statusElementId, onComplete) {
+    const maxAttempts = 600; // 10 minutes max (600 * 1s) - increased for color operations
+    let attempts = 0;
+    
+    const poll = async () => {
+        if (attempts++ >= maxAttempts) {
+            showStatus(statusElementId, 'Operation timed out after 10 minutes', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/status');
+            const data = await response.json();
+            
+            // Handle nested status structure: { success: true, status: {...} }
+            const status = data.status || data;
+            
+            if (status.operation === operation) {
+                if (status.state === 'running') {
+                    // Update progress bar if it exists
+                    const progressBar = document.getElementById(statusElementId)?.querySelector('.progress-bar');
+                    const progressText = document.getElementById(statusElementId)?.querySelector('.progress-text');
+                    
+                    if (progressBar && status.progress !== undefined) {
+                        progressBar.style.width = `${Math.min(status.progress, 99)}%`;
+                    }
+                    if (progressText && status.progress !== undefined) {
+                        progressText.textContent = `${Math.min(status.progress, 99)}% - ${status.message}`;
+                    } else {
+                        showStatus(statusElementId, status.message, 'info');
+                    }
+                    
+                    // Poll more frequently at the start, then less frequently
+                    const delay = attempts < 5 ? 500 : 1000;
+                    setTimeout(poll, delay);
+                } else if (status.state === 'done') {
+                    const progressBar = document.getElementById(statusElementId)?.querySelector('.progress-bar');
+                    if (progressBar) {
+                        progressBar.style.width = '100%';
+                        const progressText = document.getElementById(statusElementId)?.querySelector('.progress-text');
+                        if (progressText) {
+                            progressText.textContent = `100% - ${status.message}`;
+                        }
+                    }
+                    showStatus(statusElementId, `✓ ${status.message}`, 'success');
+                    if (onComplete) onComplete(status);
+                } else if (status.state === 'error') {
+                    showStatus(statusElementId, status.lastError || status.message, 'error');
+                }
+            } else {
+                // Still waiting for operation to start or wrong operation
+                setTimeout(poll, 500);
+            }
+        } catch (error) {
+            console.error('Status check error:', error);
+            showStatus(statusElementId, `Status check failed: ${error.message}`, 'error');
+        }
+    };
+    
+    setTimeout(poll, 100); // Start polling immediately
 }
 
 /**
@@ -1879,7 +1775,11 @@ function loadDefaultMediaAssets() {
         { path: 'assets/logos/sc-game-logo-small.svg', type: 'image', name: 'SC Logo Small', url: 'assets/logos/sc-game-logo-small.svg' },
         { path: 'assets/logos/sc-game-logo-wide.svg', type: 'image', name: 'SC Logo Wide', url: 'assets/logos/sc-game-logo-wide.svg' },
         { path: 'assets/logos/sq42-game-logo-small.svg', type: 'image', name: 'SQ42 Logo', url: 'assets/logos/sq42-game-logo-small.svg' },
-        { path: 'assets/logos/star_engine.svg', type: 'image', name: 'Star Engine Logo', url: 'assets/logos/star_engine.svg' }
+        { path: 'assets/logos/star_engine.svg', type: 'image', name: 'Star Engine Logo', url: 'assets/logos/star_engine.svg' },
+        // Videos
+        { path: 'assets/videos/sc_bg_video.webm', type: 'video', name: 'Default Background Video', url: 'assets/videos/sc_bg_video.webm' },
+        { path: 'assets/videos/sc_bg_video_stanton.webm', type: 'video', name: 'Stanton Background Video', url: 'assets/videos/sc_bg_video_stanton.webm' },
+        { path: 'assets/videos/sc_bg_video_pyro.webm', type: 'video', name: 'Pyro Background Video', url: 'assets/videos/sc_bg_video_pyro.webm' }
     ];
 
     lastMediaAssets = defaultAssets;
@@ -2081,13 +1981,38 @@ async function applyMedia() {
         return;
     }
 
-    showStatus('media-status', 'Uploading and replacing media...', 'info');
+    // Show progress bar
+    const statusEl = document.getElementById('media-status');
+    if (statusEl && !statusEl.querySelector('.progress-bar-wrapper')) {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'progress-bar-wrapper';
+        wrapper.innerHTML = `
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="media-progress-bar" style="width: 0%;"></div>
+            </div>
+            <div class="progress-text" id="media-progress-text" style="text-align: center; margin-top: 8px; font-size: 0.9em; color: #8db4d0;">Starting media upload...</div>
+        `;
+        statusEl.innerHTML = '';
+        statusEl.appendChild(wrapper);
+        statusEl.style.display = 'block';
+    }
 
     try {
-        for (const [targetPath, file] of Object.entries(media)) {
+        const entries = Object.entries(media);
+        const total = entries.length;
+        let completed = 0;
+
+        const progressBar = document.getElementById('media-progress-bar');
+        const progressText = document.getElementById('media-progress-text');
+
+        for (const [targetPath, file] of entries) {
             const formData = new FormData();
             formData.append('file', file);
             formData.append('targetPath', targetPath);
+
+            if (progressText) {
+                progressText.textContent = `Uploading ${completed + 1} of ${total}: ${file.name}`;
+            }
 
             const response = await fetch('/api/upload-media', {
                 method: 'POST',
@@ -2098,6 +2023,12 @@ async function applyMedia() {
 
             if (!response.ok) {
                 throw new Error(data.error || `Failed to upload ${targetPath}`);
+            }
+
+            completed++;
+            const progress = Math.round((completed / total) * 100);
+            if (progressBar) {
+                progressBar.style.width = `${progress}%`;
             }
         }
 
@@ -2158,9 +2089,10 @@ function renderMusicList() {
             <div class="music-item-order">${index + 1}</div>
             <div class="music-item-name">
                 ${track.name}
-                ${track.isDefault ? '<span style="color: #2875a4; font-size: 12px;"> (default)</span>' : ''}
+                ${track.isDefault ? '<span style="color: #00d4ff; font-size: 12px;"> (default)</span>' : '<span style="color: #80d0ff; font-size: 12px;"> (custom)</span>'}
             </div>
             <div class="music-item-controls">
+                <button onclick="playMusicTrack(${index})" title="Play">▶</button>
                 <button class="remove-btn" onclick="removeMusicFile(${index})" title="Remove">✕</button>
             </div>
         </div>
@@ -2203,6 +2135,71 @@ function removeMusicFile(index) {
     state.music.splice(index, 1);
     renderMusicList();
     showStatus('music-status', `✓ Removed ${track.name}`, 'success');
+}
+
+/**
+ * Play music track in player
+ */
+async function playMusicTrack(index) {
+    const track = state.music[index];
+    if (!track) {
+        console.error('Track not found at index:', index);
+        return;
+    }
+
+    const player = document.getElementById('musicPlayerElement');
+    const titleEl = document.getElementById('currentTrackName');
+    const typeEl = document.getElementById('currentTrackType');
+
+    if (!player || !titleEl || !typeEl) {
+        console.error('Music player elements not found');
+        return;
+    }
+
+    try {
+        // Stop and clear any existing playback
+        player.pause();
+        player.currentTime = 0;
+
+        let audioUrl = null;
+
+        if (track.file) {
+            // Custom file selected by user
+            audioUrl = URL.createObjectURL(track.file);
+            titleEl.textContent = track.name;
+            typeEl.textContent = 'Custom File';
+        } else if (track.isDefault) {
+            // Default file from server
+            const response = await fetch(`/api/music/${encodeURIComponent(track.name)}`);
+            if (response.ok) {
+                const blob = await response.blob();
+                audioUrl = URL.createObjectURL(blob);
+                titleEl.textContent = track.name;
+                typeEl.textContent = 'Default File';
+            } else {
+                showStatus('music-status', `Failed to load ${track.name}`, 'error');
+                return;
+            }
+        }
+
+        if (audioUrl) {
+            // Set the source directly on the player
+            player.src = audioUrl;
+            player.load();
+            
+            // Play with user interaction handling
+            const playPromise = player.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(err => {
+                    console.error('Error playing audio:', err);
+                    showStatus('music-status', 'Click play button on the audio player to start', 'info');
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error loading music track:', error);
+        showStatus('music-status', `Error loading ${track.name}`, 'error');
+    }
 }
 
 /**
@@ -2559,6 +2556,81 @@ function importThemeFromColors() {
 }
 
 /**
+ * Export current preset to file
+ */
+function exportCurrentPreset() {
+    if (Object.keys(state.colors).length === 0) {
+        showStatus('colors-status', 'No colors to export. Please add color mappings first.', 'error');
+        return;
+    }
+
+    const theme = {
+        name: state.config.name || 'Custom Theme',
+        description: 'Exported from RUIE',
+        colors: state.colors,
+        media: state.media || {},
+        music: state.music || [],
+        timestamp: new Date().toISOString()
+    };
+
+    const json = JSON.stringify(theme, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    
+    const a = document.createElement('a');
+    a.href = url;
+    const filename = (state.config.name || 'custom-theme').toLowerCase().replace(/\s+/g, '-');
+    a.download = `${filename}.theme.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    showStatus('colors-status', '✓ Theme exported successfully', 'success');
+}
+
+/**
+ * Save current preset to server
+ */
+async function saveCurrentPreset() {
+    if (Object.keys(state.colors).length === 0) {
+        showStatus('colors-status', 'No colors to save. Please add color mappings first.', 'error');
+        return;
+    }
+
+    const themeName = prompt('Enter a name for this preset:', state.config.name || 'My Custom Theme');
+    if (!themeName) return;
+
+    try {
+        const theme = {
+            name: themeName,
+            description: 'Custom preset',
+            colors: state.colors,
+            media: state.media || {},
+            music: state.music || []
+        };
+
+        const response = await fetch('/api/save-preset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(theme)
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            state.config.name = themeName;
+            showStatus('colors-status', `✓ Preset "${themeName}" saved successfully`, 'success');
+        } else {
+            showStatus('colors-status', `Failed to save preset: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving preset:', error);
+        showStatus('colors-status', `Error saving preset: ${error.message}`, 'error');
+    }
+}
+
+/**
  * Import theme from Finalize page
  */
 function importTheme() {
@@ -2753,21 +2825,20 @@ function showStatus(elementId, message, type) {
     element.className = `status show ${type}`;
 }
 
-window.addEventListener('load', () => {
+window.addEventListener('load', async () => {
     // Initialize DOM cache first for performance
     DOM.init();
+
+    await loadPresetFiles();
     
     // Initialize page navigation - start on initialization page (step 1)
     navigateToPage(1);
     
-    setTimeout(() => {
-        updatePreviewFromColors(state.colors || {});
-        
-        // Initialize with default RSI media if available
-        if (state.media && Object.keys(state.media).length > 0) {
-            updatePreviewMedia(state.media);
-        }
-    }, 200);
+    // Load initial backups list
+    await loadBackupsList();
+    
+    // Load extracted ASAR list
+    await loadExtractedASARList();
 
     detectLauncher({ autoInit: false, silentFailure: true });
 });
