@@ -357,6 +357,52 @@ The latest version of `build_installer.bat` has been corrected to use the proper
 
 ---
 
+### Issue 6.7: Missing Wizard Image Files
+
+**Error Message:**
+```
+Error on line 25: Could not read "C:\Program Files (x86)\Inno Setup 6\wizmodernimage-is.bmp".
+Error: The system cannot find the file specified.
+Compile aborted.
+```
+
+**Cause:**
+The `.iss` script file was referencing custom wizard image files that don't exist in the Inno Setup installation:
+```ini
+WizardImageFile=compiler:wizmodernimage-is.bmp
+WizardSmallImageFile=compiler:wizmodernsmallimage-is.bmp
+```
+
+These files may be missing or have different names in your Inno Setup version.
+
+**Solution:**
+Remove the wizard image file references and let Inno Setup use its default modern wizard design.
+
+**In RUIE_Installer.iss:**
+```ini
+[Setup]
+; ... other settings ...
+WizardStyle=modern
+UninstallDisplayIcon={app}\RUIE.exe
+ArchitecturesInstallIn64BitMode=x64
+ArchitecturesAllowed=x64
+
+; REMOVE these lines:
+; WizardImageFile=compiler:wizmodernimage-is.bmp
+; WizardSmallImageFile=compiler:wizmodernsmallimage-is.bmp
+```
+
+**Why it was fixed:**
+- The `compiler:` prefix doesn't work reliably with custom image paths
+- The modern wizard style has built-in default images
+- Removing these lines maintains a professional appearance
+- The installer will use Inno Setup's default modern wizard theme
+
+**Result:**
+The installer will compile successfully and display the professional modern wizard interface with Inno Setup's default images.
+
+---
+
 ### Issue 7: Build Takes Too Long or Hangs
 
 **Possible Causes:**
