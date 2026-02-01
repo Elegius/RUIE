@@ -25,8 +25,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Version info
-APP_VERSION = "0.1 Alpha"
+APP_VERSION = "0.2 Alpha"
 APP_NAME = "RUIE"
+# Development Note: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5)
+
+# Copyright and Disclaimer
+COPYRIGHT_TEXT = """
+RUIE is an independent fan-made project and is not affiliated with Cloud Imperium Games (CIG) or Star Citizen.
+Star Citizen and the RSI Launcher are registered trademarks of Cloud Imperium Games.
+
+This tool is provided for personal customization use only and comes with no warranty.
+"""
 
 def is_frozen():
     """Check if running as compiled executable."""

@@ -30,17 +30,32 @@ def get_resource_path(relative_path):
 # Set up Flask with the correct static folder
 static_folder = get_resource_path('public')
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
-CORS(app)
+
+# CORS configuration - local desktop app only
+# Restrict to localhost to prevent accidental exposure
+CORS(app, resources={
+    r"/api/*": {
+        "origins": ["http://localhost:*", "http://127.0.0.1:*"],
+        "methods": ["GET", "POST", "OPTIONS"],
+        "allow_headers": ["Content-Type"]
+    }
+})
 
 # Performance configurations
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 86400  # 24 hour cache for static files
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max upload
 app.config['JSON_SORT_KEYS'] = False  # Don't sort JSON keys for speed
 
-# Add cache headers for static files
+# Add cache headers and security headers for static files
 @app.after_request
-def add_cache_headers(response):
-    """Add cache headers to reduce bandwidth and improve performance."""
+def add_security_headers(response):
+    """Add security headers and cache headers to responses."""
+    # Add security headers to prevent XSS and clickjacking
+    response.headers['X-Content-Type-Options'] = 'nosniff'  # Prevent MIME-type sniffing
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'  # Prevent clickjacking
+    response.headers['X-XSS-Protection'] = '1; mode=block'  # Enable XSS protection
+    
+    # Cache static assets for performance
     if response.content_type and ('image' in response.content_type or 
                                    'font' in response.content_type or
                                    'css' in response.content_type or
@@ -91,21 +106,30 @@ class ThemeManager:
         
         asar_path = self.launcher_info['asarPath']
         timestamp = datetime.now().strftime('%Y%m%d-%H%M%S')
-        self.extracted_dir = os.path.join(DOCS_DIR, f'app-extracted-{timestamp}')
+        # Normalize DOCS_DIR path to use backslashes consistently
+        docs_dir = os.path.normpath(DOCS_DIR)
+        extracted_path = os.path.normpath(os.path.join(docs_dir, f'app-decompiled-{timestamp}'))
         
         try:
-            self.set_status('extract', 'running', 'Extracting app.asar...', progress=10, last_error=None)
+            self.set_status('extract', 'running', 'Decompiling app.asar...', progress=10, last_error=None)
             print(f"[ThemeManager] Extracting from: {asar_path}")
-            print(f"[ThemeManager] Extracting to: {self.extracted_dir}")
+            print(f"[ThemeManager] Extracting to: {extracted_path}")
             
-            # Use npx asar to extract (with shell=True to find npx in PATH)
-            os.makedirs(self.extracted_dir, exist_ok=True)
+            # Ensure target directory exists
+            os.makedirs(extracted_path, exist_ok=True)
+            
+            # Check if app.asar exists
+            if not os.path.exists(asar_path):
+                raise Exception(f"app.asar not found at {asar_path}")
+            
+            # Try extraction with unpacked flag
+            print(f"[ThemeManager] Attempting extraction with asar...")
             result = subprocess.run(
-                f'npx asar extract "{asar_path}" "{self.extracted_dir}"',
+                ['asar', 'extract', asar_path, extracted_path],
                 capture_output=True,
                 text=True,
                 check=False,
-                shell=True
+                cwd=os.path.normpath(docs_dir)
             )
             
             print(f"[ThemeManager] Extract return code: {result.returncode}")
@@ -115,15 +139,30 @@ class ThemeManager:
                 print(f"[ThemeManager] Stderr: {result.stderr}")
             
             if result.returncode != 0:
-                print(f"[ThemeManager] Error extracting asar: {result.stderr}")
-                self.set_status('extract', 'error', 'Extraction failed', progress=0, last_error=result.stderr.strip() or 'Extraction failed')
-                return False
+                # Check if it's an unpacked directory issue
+                unpacked_dir = asar_path + '.unpacked'
+                if os.path.exists(unpacked_dir):
+                    print(f"[ThemeManager] Found unpacked directory, attempting to copy it...")
+                    try:
+                        import shutil
+                        dest_unpacked = extracted_path + '.unpacked'
+                        shutil.copytree(unpacked_dir, dest_unpacked)
+                        print(f"[ThemeManager] Unpacked directory copied successfully")
+                    except Exception as copy_error:
+                        print(f"[ThemeManager] Failed to copy unpacked directory: {copy_error}")
+                else:
+                    print(f"[ThemeManager] No unpacked directory found at {unpacked_dir}")
+                    error_msg = result.stderr.strip() or 'Decompilation failed'
+                    self.set_status('extract', 'error', 'Decompilation failed', progress=0, last_error=error_msg)
+                    return False
             
             # Save metadata about original state
-            self._save_extraction_metadata()
+            self._save_extraction_metadata(extracted_path)
             
             print(f"[ThemeManager] Extract successful")
             self.set_status('extract', 'done', 'Extraction complete', progress=100, last_error=None)
+            # NOTE: Do NOT auto-select the extraction. User must click to select it.
+            # self.extracted_dir remains unchanged until user explicitly selects an extraction
             return True
         except Exception as e:
             print(f"[ThemeManager] Exception extracting asar: {e}")
@@ -229,13 +268,12 @@ class ThemeManager:
             except PermissionError:
                 raise PermissionError(f'Permission denied: Unable to write to {asar_path}. Try running as Administrator.')
             
-            # Repack (with shell=True for npx)
+            # Repack (without shell - safer)
             result = subprocess.run(
-                f'npx asar pack "{self.extracted_dir}" "{asar_path}"',
+                ['npx', 'asar', 'pack', self.extracted_dir, asar_path],
                 capture_output=True,
                 text=True,
-                check=False,
-                shell=True
+                check=False
             )
             
             if result.returncode != 0:
@@ -284,9 +322,9 @@ class ThemeManager:
             except Exception as e:
                 print(f"Error removing extracted folder {extract}: {e}")
 
-    def _save_extraction_metadata(self):
+    def _save_extraction_metadata(self, extracted_path):
         """Save metadata about the original extraction state."""
-        if not self.extracted_dir or not os.path.exists(self.extracted_dir):
+        if not extracted_path or not os.path.exists(extracted_path):
             return
         
         try:
@@ -297,7 +335,7 @@ class ThemeManager:
             }
             
             # Extract original colors from main.*.js
-            extracted_root = Path(self.extracted_dir)
+            extracted_root = Path(extracted_path)
             main_files = list(extracted_root.glob('**/main.*.js'))
             
             for main_file in main_files:
@@ -312,7 +350,7 @@ class ThemeManager:
                     pass
             
             # Store original media file sizes as baseline
-            for root, dirs, files in os.walk(self.extracted_dir):
+            for root, dirs, files in os.walk(extracted_path):
                 for file in files:
                     ext = Path(file).suffix.lower()
                     if ext in {'.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.mp4', '.webm', '.mkv', '.avi', '.mov', '.m4v', '.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac'}:
@@ -853,25 +891,31 @@ def api_delete_extract():
     data = request.json or {}
     path_str = data.get('path', '').strip()
     
+    print(f'[API] DELETE /api/delete-extract called with path: {path_str}')
+    
     if not path_str:
+        print(f'[API] Error: Missing path')
         return jsonify({'success': False, 'error': 'Missing path'}), 400
     
     path = Path(path_str)
     
     # Verify the path exists and is in the expected directory
     if not path.exists():
-        return jsonify({'success': False, 'error': 'Extracted folder not found'}), 404
+        print(f'[API] Error: Path does not exist: {path}')
+        return jsonify({'success': False, 'error': f'Extracted folder not found: {path}'}), 404
     
     try:
         # Prevent deletion if it's the currently active extraction
         if theme_manager.extracted_dir and Path(theme_manager.extracted_dir) == path:
+            print(f'[API] Error: Cannot delete currently active extraction: {path}')
             return jsonify({'success': False, 'error': 'Cannot delete the currently active extraction'}), 400
         
         # Delete the directory recursively
         import shutil
+        print(f'[API] Deleting directory: {path}')
         shutil.rmtree(str(path))
         
-        print(f'[API] Deleted extracted folder: {path}')
+        print(f'[API] Successfully deleted extracted folder: {path}')
         
         return jsonify({
             'success': True,
@@ -879,7 +923,9 @@ def api_delete_extract():
         })
     except Exception as e:
         print(f'[API Error] Failed to delete extract: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Failed to delete: {str(e)}'}), 500
 
 @app.route('/api/extraction-changes', methods=['GET'])
 def api_extraction_changes():
@@ -1031,15 +1077,22 @@ def api_update_music_code():
             return jsonify({'success': False, 'error': 'No music files provided'}), 400
 
         base = Path(theme_manager.extracted_dir).resolve()
-        static_js_dir = base / 'static' / 'js'
         
-        if not static_js_dir.exists():
-            return jsonify({'success': False, 'error': 'static/js directory not found'}), 404
+        # Check multiple possible locations for main.*.js
+        candidate_dirs = [
+            base / 'app' / 'static' / 'js',
+            base / 'app' / 'assets' / 'static' / 'js',
+            base / 'static' / 'js',
+            base / 'assets' / 'static' / 'js'
+        ]
 
-        # Find main.*.js file
-        main_js_files = list(static_js_dir.glob('main.*.js'))
+        main_js_files = []
+        for candidate in candidate_dirs:
+            if candidate.exists():
+                main_js_files.extend(candidate.glob('main.*.js'))
+        
         if not main_js_files:
-            return jsonify({'success': False, 'error': 'main.*.js file not found'}), 404
+            return jsonify({'success': False, 'error': 'main.*.js file not found in any standard location'}), 404
 
         main_js_path = main_js_files[0]
         
@@ -1079,125 +1132,303 @@ def api_compile_changes():
 @app.route('/api/test-launcher', methods=['POST'])
 def api_test_launcher():
     """Test launcher - pack and run temporarily without installing."""
-    if not theme_manager.extracted_dir or not theme_manager.launcher_info:
-        return jsonify({'success': False, 'error': 'Nothing extracted yet'}), 400
-    
     try:
-        # Create temp asar
-        with tempfile.NamedTemporaryFile(suffix='.asar', delete=False) as tmp:
-            temp_asar = tmp.name
+        data = request.json or {}
+        extracted_path = data.get('extractedPath')
         
-        # Pack the extracted dir to temp location
-        result = subprocess.run(
-            f'npx asar pack "{theme_manager.extracted_dir}" "{temp_asar}"',
-            capture_output=True,
-            text=True,
-            check=False,
-            shell=True
-        )
-        
-        if result.returncode != 0:
+        if not extracted_path or not os.path.exists(extracted_path):
             return jsonify({
                 'success': False,
-                'error': f'Failed to pack asar: {result.stderr}'
-            }), 500
-        
-        # Get launcher executable path
-        launcher_exe = theme_manager.launcher_info.get('exePath') or theme_manager.launcher_info.get('launcherPath')
-        if not launcher_exe:
-            os.remove(temp_asar)
-            return jsonify({
-                'success': False,
-                'error': 'Launcher executable path not found in launcher info'
+                'error': 'Invalid extraction path provided'
             }), 400
         
-        if not os.path.exists(launcher_exe):
-            os.remove(temp_asar)
-            return jsonify({
-                'success': False,
-                'error': f'Launcher executable not found at: {launcher_exe}'
-            }), 404
-        
-        # Replace asar temporarily
-        asar_path = theme_manager.launcher_info['asarPath']
-        
-        # Create backup in a writable temp location instead of Program Files
-        temp_backup_dir = os.path.join(tempfile.gettempdir(), 'rsi-launcher-test')
-        os.makedirs(temp_backup_dir, exist_ok=True)
-        backup_asar = os.path.join(temp_backup_dir, 'app.asar.backup')
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not detected'}), 400
         
         try:
-            # Backup original to temp location
-            if os.path.exists(asar_path):
-                shutil.copy2(asar_path, backup_asar)
+            # Create temp asar
+            with tempfile.NamedTemporaryFile(suffix='.asar', delete=False) as tmp:
+                temp_asar = tmp.name
             
-            # Replace with temp version
-            shutil.copy2(temp_asar, asar_path)
+            # Pack the extracted dir to temp location
+            result = subprocess.run(
+                ['npx', 'asar', 'pack', extracted_path, temp_asar],
+                capture_output=True,
+                text=True,
+                check=False
+            )
             
-        except PermissionError:
-            try:
+            if result.returncode != 0:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to pack asar: {result.stderr}'
+                }), 500
+            
+            # Get launcher executable path
+            launcher_exe = theme_manager.launcher_info.get('exePath') or theme_manager.launcher_info.get('launcherPath')
+            if not launcher_exe:
                 os.remove(temp_asar)
-            except:
-                pass
-            return jsonify({
-                'success': False,
-                'error': 'Permission denied: Unable to access launcher in Program Files. Try running this application as Administrator.'
-            }), 403
-        except Exception as e:
-            try:
-                os.remove(temp_asar)
-            except:
-                pass
-            return jsonify({
-                'success': False,
-                'error': f'Failed to replace app.asar: {str(e)}'
-            }), 500
-        
-        try:
-            # Launch and wait for user to close it
-            launcher_process = subprocess.Popen(launcher_exe)
+                return jsonify({
+                    'success': False,
+                    'error': 'Launcher executable path not found in launcher info'
+                }), 400
             
-            # Wait for launcher process to complete
-            def restore_after_process_exit():
-                try:
-                    launcher_process.wait()  # Wait for launcher to exit
-                except Exception as e:
-                    print(f'[ThemeManager] Error waiting for launcher: {e}')
+            if not os.path.exists(launcher_exe):
+                os.remove(temp_asar)
+                return jsonify({
+                    'success': False,
+                    'error': f'Launcher executable not found at: {launcher_exe}'
+                }), 404
+            
+            # Replace asar temporarily
+            asar_path = theme_manager.launcher_info['asarPath']
+            
+            # Create backup in a writable temp location instead of Program Files
+            temp_backup_dir = os.path.join(tempfile.gettempdir(), 'rsi-launcher-test')
+            os.makedirs(temp_backup_dir, exist_ok=True)
+            backup_asar = os.path.join(temp_backup_dir, 'app.asar.backup')
+            
+            try:
+                # Backup original to temp location
+                if os.path.exists(asar_path):
+                    shutil.copy2(asar_path, backup_asar)
                 
-                # Restore original
+                # Replace with temp version
+                shutil.copy2(temp_asar, asar_path)
+                
+            except PermissionError:
+                try:
+                    os.remove(temp_asar)
+                except:
+                    pass
+                return jsonify({
+                    'success': False,
+                    'error': 'Permission denied: Unable to access launcher in Program Files. Try running this application as Administrator.'
+                }), 403
+            except Exception as e:
+                try:
+                    os.remove(temp_asar)
+                except:
+                    pass
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to replace app.asar: {str(e)}'
+                }), 500
+            
+            try:
+                # Launch and wait for user to close it
+                launcher_process = subprocess.Popen(launcher_exe)
+                
+                # Wait for launcher process to complete
+                def restore_after_process_exit():
+                    try:
+                        launcher_process.wait()  # Wait for launcher to exit
+                    except Exception as e:
+                        print(f'[ThemeManager] Error waiting for launcher: {e}')
+                    
+                    # Restore original
+                    try:
+                        if os.path.exists(backup_asar):
+                            shutil.copy2(backup_asar, asar_path)
+                            os.remove(backup_asar)
+                    except Exception as e:
+                        print(f'[ThemeManager] Error restoring backup: {e}')
+                    finally:
+                        try:
+                            os.remove(temp_asar)
+                        except:
+                            pass
+                
+                restore_thread = threading.Thread(target=restore_after_process_exit, daemon=True)
+                restore_thread.start()
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Launcher started with test theme. Close the launcher when done.'
+                })
+            except Exception as e:
+                # Restore on error
                 try:
                     if os.path.exists(backup_asar):
                         shutil.copy2(backup_asar, asar_path)
                         os.remove(backup_asar)
-                except Exception as e:
-                    print(f'[ThemeManager] Error restoring backup: {e}')
+                except:
+                    pass
+                raise e
+        
+        except Exception as e:
+            print(f'[API Error] Test launcher failed: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    except Exception as e:
+        print(f'[API Error] Test launcher request failed: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/compile-asar', methods=['POST'])
+def api_compile_asar():
+    """Compile the modified app.asar without installing."""
+    try:
+        data = request.json or {}
+        extracted_path = data.get('extractedPath')
+        
+        if not extracted_path or not os.path.exists(extracted_path):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid extraction path provided'
+            }), 400
+        
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not detected'}), 400
+        
+        try:
+            # Create output asar in a temp location
+            with tempfile.NamedTemporaryFile(suffix='.asar', delete=False) as tmp:
+                output_asar = tmp.name
+            
+            # Pack the extracted dir
+            result = subprocess.run(
+                ['npx', 'asar', 'pack', extracted_path, output_asar],
+                capture_output=True,
+                text=True,
+                check=False
+            )
+            
+            if result.returncode != 0:
+                try:
+                    os.remove(output_asar)
+                except:
+                    pass
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to compile asar: {result.stderr}'
+                }), 500
+            
+            # Move compiled asar to a persistent location for later installation
+            compile_dir = os.path.join(os.path.dirname(theme_manager.launcher_info['asarPath']), 'compiled')
+            os.makedirs(compile_dir, exist_ok=True)
+            
+            compiled_asar_path = os.path.join(compile_dir, f"app-compiled-{int(time.time())}.asar")
+            shutil.move(output_asar, compiled_asar_path)
+            
+            return jsonify({
+                'success': True,
+                'message': f'Compiled app.asar created successfully',
+                'path': compiled_asar_path
+            })
+        
+        except Exception as e:
+            print(f'[API Error] Compile asar failed: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    except Exception as e:
+        print(f'[API Error] Compile asar request failed: {str(e)}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/install-asar', methods=['POST'])
+def api_install_asar():
+    """Compile and install the modified app.asar."""
+    try:
+        data = request.json or {}
+        extracted_path = data.get('extractedPath')
+        
+        if not extracted_path or not os.path.exists(extracted_path):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid extraction path provided'
+            }), 400
+        
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not detected'}), 400
+        
+        try:
+            asar_path = theme_manager.launcher_info['asarPath']
+            
+            # Create backup with timestamp
+            backup_dir = os.path.join(os.path.dirname(asar_path), 'backups')
+            os.makedirs(backup_dir, exist_ok=True)
+            backup_asar = os.path.join(backup_dir, f"app.asar.backup-{int(time.time())}")
+            
+            # Backup original
+            try:
+                if os.path.exists(asar_path):
+                    shutil.copy2(asar_path, backup_asar)
+                    print(f'[API] Created backup at: {backup_asar}')
+            except PermissionError:
+                return jsonify({
+                    'success': False,
+                    'error': 'Permission denied: Unable to back up original launcher. Try running this application as Administrator.'
+                }), 403
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'error': f'Failed to create backup: {str(e)}'
+                }), 500
+            
+            # Pack the extracted dir to the actual launcher location
+            try:
+                with tempfile.NamedTemporaryFile(suffix='.asar', delete=False) as tmp:
+                    temp_asar = tmp.name
+                
+                result = subprocess.run(
+                    ['npx', 'asar', 'pack', extracted_path, temp_asar],
+                    capture_output=True,
+                    text=True,
+                    check=False
+                )
+                
+                if result.returncode != 0:
+                    try:
+                        os.remove(temp_asar)
+                    except:
+                        pass
+                    return jsonify({
+                        'success': False,
+                        'error': f'Failed to compile asar: {result.stderr}'
+                    }), 500
+                
+                # Replace original with compiled version
+                try:
+                    shutil.copy2(temp_asar, asar_path)
+                    print(f'[API] Installed modified app.asar to: {asar_path}')
+                except PermissionError:
+                    try:
+                        os.remove(temp_asar)
+                    except:
+                        pass
+                    return jsonify({
+                        'success': False,
+                        'error': 'Permission denied: Unable to install to launcher. Try running this application as Administrator.'
+                    }), 403
                 finally:
                     try:
                         os.remove(temp_asar)
                     except:
                         pass
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Modified app.asar installed successfully. Backup created. Restart the launcher to apply changes.',
+                    'backup_path': backup_asar
+                })
             
-            restore_thread = threading.Thread(target=restore_after_process_exit, daemon=True)
-            restore_thread.start()
-            
-            return jsonify({
-                'success': True,
-                'message': 'Launcher started with test theme. Close the launcher when done.'
-            })
+            except Exception as e:
+                print(f'[API Error] Installation failed: {str(e)}')
+                import traceback
+                traceback.print_exc()
+                return jsonify({'success': False, 'error': str(e)}), 500
+        
         except Exception as e:
-            # Restore on error
-            try:
-                if os.path.exists(backup_asar):
-                    shutil.copy2(backup_asar, asar_path)
-                    os.remove(backup_asar)
-            except:
-                pass
-            raise e
+            print(f'[API Error] Install asar failed: {str(e)}')
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
     
     except Exception as e:
-        print(f'[API Error] Test launcher failed: {str(e)}')
-        import traceback
-        traceback.print_exc()
+        print(f'[API Error] Install asar request failed: {str(e)}')
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/deploy-theme', methods=['POST'])
@@ -1353,23 +1584,39 @@ def api_config_load():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/api/backups', methods=['GET'])
+@app.route('/api/backups', methods=['GET', 'POST'])
 def api_backups():
-    """List backups."""
-    backup_dir = os.path.expanduser('~/Documents/RSI-Launcher-Theme-Creator')
+    """List or create backups."""
+    if request.method == 'POST':
+        # Create new backup
+        try:
+            if not theme_manager.extracted_dir:
+                return jsonify({'success': False, 'error': 'No extraction selected'}), 400
+            
+            if not theme_manager.create_backup():
+                return jsonify({'success': False, 'error': 'Failed to create backup'}), 500
+            
+            return jsonify({'success': True, 'message': 'Backup created successfully'})
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
+    
+    # GET: List backups - use same directory as extractions
+    backup_dir = os.path.normpath(DOCS_DIR)
     backups = []
     
     try:
-        for item in os.listdir(backup_dir):
-            if item.startswith('backup-'):
-                path = os.path.join(backup_dir, item)
-                if os.path.isdir(path):
-                    backups.append({
-                        'name': item,
-                        'path': path,
-                        'date': item.replace('backup-', '')
-                    })
-    except:
+        if os.path.exists(backup_dir):
+            for item in os.listdir(backup_dir):
+                if item.startswith('backup-'):
+                    path = os.path.join(backup_dir, item)
+                    if os.path.isdir(path):
+                        backups.append({
+                            'name': item,
+                            'path': path,
+                            'date': item.replace('backup-', '')
+                        })
+    except Exception as e:
+        print(f"[API] Error listing backups: {e}")
         pass
     
     return jsonify({
@@ -1381,20 +1628,24 @@ def api_backups():
 def api_restore():
     """Restore from backup."""
     data = request.json
-    backup_name = data.get('backup')
+    backup_path = data.get('path')
     
-    if not backup_name or not theme_manager.launcher_info:
-        return jsonify({'success': False, 'error': 'Invalid backup or launcher'}), 400
+    if not backup_path:
+        return jsonify({'success': False, 'error': 'Missing backup path'}), 400
     
     try:
-        backup_path = os.path.expanduser(f'~/Documents/RSI-Launcher-Theme-Creator/{backup_name}/app.asar')
+        backup_asar = os.path.join(backup_path, 'app.asar')
+        if not os.path.exists(backup_asar):
+            return jsonify({'success': False, 'error': 'Backup app.asar not found'}), 404
+        
+        if not theme_manager.launcher_info:
+            return jsonify({'success': False, 'error': 'Launcher not initialized'}), 400
+        
         target_path = theme_manager.launcher_info['asarPath']
         
-        if not os.path.exists(backup_path):
-            return jsonify({'success': False, 'error': 'Backup not found'}), 404
-        
         # Copy backup to target
-        shutil.copy2(backup_path, target_path)
+        import shutil
+        shutil.copy2(backup_asar, target_path)
         
         return jsonify({
             'success': True,
@@ -1402,6 +1653,39 @@ def api_restore():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/delete-backup', methods=['POST'])
+def api_delete_backup():
+    """Delete a backup folder."""
+    data = request.json
+    backup_path = data.get('path')
+    
+    print(f'[API] DELETE /api/delete-backup called with path: {backup_path}')
+    
+    if not backup_path:
+        print(f'[API] Error: Missing backup path')
+        return jsonify({'success': False, 'error': 'Missing backup path'}), 400
+    
+    try:
+        path = Path(backup_path)
+        if not path.exists():
+            print(f'[API] Error: Backup not found at: {path}')
+            return jsonify({'success': False, 'error': f'Backup not found: {path}'}), 404
+        
+        import shutil
+        print(f'[API] Deleting backup directory: {path}')
+        shutil.rmtree(path)
+        
+        print(f'[API] Successfully deleted backup: {path}')
+        return jsonify({
+            'success': True,
+            'message': 'Backup deleted successfully'
+        })
+    except Exception as e:
+        print(f'[API Error] Failed to delete backup: {str(e)}')
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': f'Failed to delete: {str(e)}'}), 500
 
 @app.route('/api/save-preset', methods=['POST'])
 def api_save_preset():

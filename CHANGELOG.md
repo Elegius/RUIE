@@ -1,11 +1,72 @@
 # Changelog
 
-## Version 0.1 Alpha - Initial Release (January 2026)
+## Version 0.2 Alpha - Endpoint Expansion & Security Audit (February 2026)
 
 **Status**: 🔬 Alpha Release - Active Development  
-**Latest Update**: Fixed compiled EXE startup issue (February 1, 2026)
+**Latest Update**: Added `/api/compile-asar` and `/api/install-asar` endpoints, comprehensive security audit (February 1, 2026)
 
-### Critical Fixes (February 1, 2026)
+### What's New (February 1, 2026)
+
+#### ✅ Added: New Compilation & Installation Endpoints
+- **`/api/compile-asar`** - Compile modified app.asar to persistent location without installing
+- **`/api/install-asar`** - Compile and install modified app.asar with automatic backups
+- Both endpoints include proper error handling and permission checks
+
+#### ✅ Added: Security Vulnerability Audit
+- Comprehensive security audit document (SECURITY_AUDIT.md)
+- Identified 10 security vulnerabilities with severity ratings
+- Provided detailed remediation recommendations for all issues
+- Prioritized fixes by severity (CRITICAL, HIGH, MEDIUM, LOW)
+
+#### ✅ Updated: Project Version & Copyright
+- Bumped version to 0.2 Alpha
+- Added copyright disclaimers throughout documentation
+- Clarified that RUIE is fan-made and not affiliated with Cloud Imperium Games
+
+---
+
+## Version 0.1 Alpha - Initial Release (January 2026)
+
+**Status**: 🔬 Alpha Release - Initial Development  
+**Latest Update**: Fixed delete button functionality for backups and extractions (February 1, 2026)
+
+### Latest Fixes (February 1, 2026)
+
+#### 🟢 Fixed: Delete Button Functionality for Backups & Extractions
+- **Problem**: Delete buttons for backups and extracted ASARs weren't responding to clicks
+- **Root Cause**: Event listeners attached to dynamically created buttons weren't firing
+  - Tried: `addEventListener` with bubble/capture phases
+  - Tried: `addEventListener` with arrow functions
+  - Tried: Event delegation via parent container
+  - All approaches failed to register clicks in VSCode Simple Browser
+- **Solution**: Switched to simple `onclick` property handlers (same as restore button)
+  - Changed from `addEventListener('click', ...)` to `button.onclick = () => {...}`
+  - Removed event delegation approach
+  - Used direct inline handlers with arrow functions
+  - Matched pattern used by working restore buttons
+- **Testing**: Confirmed both backup and extraction delete buttons now work
+- **Technical Notes**:
+  - VSCode Simple Browser doesn't support `addEventListener` on dynamically created elements
+  - Direct `onclick` property assignment works reliably
+  - Event logging added to verify button creation and click detection
+- **Result**: Users can now delete backups and extractions as intended
+
+### Critical Fixes (February 1, 2026 - Earlier)
+
+#### 🔴 Fixed: Compiled EXE Stuck at "Starting..."
+- **Problem**: App froze on startup when running as compiled `.exe`
+- **Root Cause**: Tried to launch Flask as subprocess using `python server.py` (not available in frozen mode)
+- **Solution**: Implemented dual-mode server startup:
+  - **Frozen Mode** (compiled EXE): Flask runs in a daemon thread within the same process
+  - **Source Mode** (development): Flask runs as subprocess for better debugging
+- **Technical Changes**:
+  - Added `is_frozen()` detection to identify compiled vs source execution
+  - Modified `launcher.py` to start Flask thread with `use_reloader=False` in frozen mode
+  - Updated `server.py` with `get_resource_path()` to locate bundled `public` folder
+  - Enhanced `build.bat` with hidden imports for Flask, server modules, and dependencies
+- **Result**: Compiled EXE now starts correctly and loads the UI
+
+### Previous Updates (January 31, 2026)
 
 #### 🔴 Fixed: Compiled EXE Stuck at "Starting..."
 - **Problem**: App froze on startup when running as compiled `.exe`

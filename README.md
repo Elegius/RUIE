@@ -3,7 +3,7 @@
 # 🎨 RUIE
 ### RSI Launcher UI Editor
 
-[![Version](https://img.shields.io/badge/version-0.1%20Alpha-blue.svg)](https://github.com)
+[![Version](https://img.shields.io/badge/version-0.2%20Alpha-blue.svg)](https://github.com)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey.svg)](https://github.com)
 [![License](https://img.shields.io/badge/license-GPL%20v3-green.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org)
@@ -11,6 +11,10 @@
 **Transform your RSI Launcher with custom themes, colors, and media**
 
 *A powerful Windows desktop application built with Python (Flask + PyQt5) featuring a complete 6-step wizard for theme creation with live preview.*
+
+⚠️ **DISCLAIMER:** This is a fan-made project and is NOT affiliated with Cloud Imperium Games or Star Citizen. Star Citizen is a registered trademark of Cloud Imperium Games. This tool is provided for personal use only.
+
+💡 **DEVELOPMENT NOTE:** This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5).
 
 [🚀 Quick Start](#-quick-start) • [✨ Features](#-features) • [🎨 Color Presets](#-color-customization) • [📖 Documentation](#-documentation) • [🐛 Troubleshooting](#-troubleshooting)
 
@@ -29,7 +33,7 @@
 ### 🎯 Core Features
 - ✅ **6-Step Wizard** - Streamlined workflow
 - 👁️ **Live Preview** - Real-time theme updates
-- 🎨 **17 Professional Presets** - Ready-to-use manufacturer themes
+- ✅ **17 Professional Presets** - Ready-to-use manufacturer themes
 - 🔧 **127+ Color Variables** - Complete customization
 - 🖼️ **Media Replacement** - Images & videos
 - 🎵 **Music Playlist** - Custom background audio
@@ -39,11 +43,11 @@
 
 ### ⚡ Advanced Features
 - 🔍 **Auto-Detection** - Finds launcher automatically
-- 💾 **Theme Management** - Save, export & import
+- 💾 **Backup & Recovery** - Save themes, restore easily
+- 🔄 **Extraction Management** - Create, reuse, delete extractions
 - 🛡️ **Admin Support** - Automatic UAC elevation
 - 📊 **Debug Logging** - Built-in troubleshooting
 - 📱 **Responsive Design** - All screen sizes
-- 📦 **Single Executable** - No dependencies (~300MB)
 
 </td>
 </tr>
@@ -64,16 +68,42 @@
 
 ## 🚀 Quick Start
 
-### 🎮 Option 1: Run Compiled Executable *(Recommended)*
+### 📦 Option 1: Install Using Windows Installer *(Recommended for Users)*
 
 ```bash
-1. Download RUIE.exe from dist/ folder
-2. Double-click to launch
+1. Download RUIE-0.2-Alpha-Installer.exe from Releases
+2. Double-click to run the installer
+3. Click "Yes" when Windows asks for admin permission
+4. Follow the installation wizard
+5. App launches automatically when done
+```
+
+**Benefits:**
+- Professional installation experience
+- Start Menu shortcuts
+- Easy uninstallation
+- Automatic updates ready
+
+---
+
+### 🎮 Option 2: Run Portable Executable
+
+```bash
+1. Download RUIE.exe from Releases or dist/ folder
+2. Double-click to launch (no installation needed)
 3. Click "Yes" when UAC prompts for admin privileges
 4. Follow the 6-step wizard
 ```
 
-### 👨‍💻 Option 2: Run from Source
+**Benefits:**
+- No installation required
+- Works from USB drives
+- Easy to remove
+- ~300MB total
+
+---
+
+### 👨‍💻 Option 3: Run from Source Code
 
 ```bash
 # Install dependencies
@@ -85,12 +115,22 @@ python launcher.py
 run.bat
 ```
 
-### 🔨 Option 3: Build Your Own EXE
+**Benefits:**
+- Full source code access
+- Easy to modify
+- Good for development
+
+---
+
+### 🔨 Option 4: Build Your Own Installer
 
 ```bash
-build.bat
-# Creates: dist\RUIE.exe (~300MB)
+# Requires Inno Setup 6 (https://jrsoftware.org/isdl.php)
+build_installer.bat
+# Creates: dist\RUIE-0.2-Alpha-Installer.exe
 ```
+
+For detailed installation instructions, see [INSTALL_GUIDE.md](INSTALL_GUIDE.md)
 
 ---
 

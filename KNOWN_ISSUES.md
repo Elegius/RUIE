@@ -1,0 +1,107 @@
+# Known Issues & Fixes
+
+## Recently Fixed ✅
+
+### Delete Button Functionality (February 1, 2026)
+- **Issue**: Delete buttons for backups and extracted ASARs didn't respond to clicks
+- **Status**: ✅ **FIXED**
+- **Details**:
+  - Delete buttons appeared in the UI but clicking them had no effect
+  - Restore buttons worked fine, so the issue was specific to delete buttons
+  - Root cause: Event listeners on dynamically created elements weren't firing in VSCode Simple Browser
+  - Solution: Switched to direct `onclick` property handlers instead of `addEventListener`
+  - Both backup and extraction deletion now work properly
+  - Safety feature preserved: Cannot delete currently active extraction
+
+---
+
+## Current Known Limitations
+
+### 1. Active Extraction Cannot Be Deleted
+- **Status**: ℹ️ **EXPECTED BEHAVIOR**
+- **Details**: The system prevents deletion of the currently loaded/active extraction
+- **Reason**: Safety measure to prevent losing working extraction in the middle of editing
+- **Workaround**: Select a different extraction first, then delete the original one
+- **Impact**: Minor - only affects power users with multiple extractions
+
+### 2. Windows Only
+- **Status**: ⚠️ **LIMITATION**
+- **Details**: RUIE only works on Windows 10/11
+- **Reason**: Requires `asar` CLI and Windows-specific file paths
+- **Workaround**: None currently available
+- **Impact**: Mac/Linux users cannot use this tool
+
+### 3. Admin Privileges Required
+- **Status**: ℹ️ **EXPECTED REQUIREMENT**
+- **Details**: App requires administrator permissions to modify launcher files
+- **Reason**: RSI Launcher is installed in protected `Program Files` directory
+- **Workaround**: App auto-requests UAC elevation on Windows
+- **Impact**: Minimal - auto-handled by application
+
+---
+
+## Troubleshooting Guide
+
+### "Cannot Delete" Extraction Error
+**Symptom**: Trying to delete an extraction shows error "Cannot delete the currently active extraction"
+
+**Solution**:
+1. Click on a different extraction to select it
+2. Try deleting the original extraction again
+3. Or extract a fresh ASAR and work with that instead
+
+**Technical Details**:
+- Backend checks if the extraction path matches `theme_manager.extracted_dir`
+- Only allows deletion if it's not the active one
+- This is a safety feature to prevent losing work
+
+### Delete Button Doesn't Respond
+**Symptom**: Click delete button but nothing happens
+
+**Solution**:
+1. Open browser console (F12) to check for JavaScript errors
+2. Restart the application
+3. Try refreshing the page (F5)
+
+**What to Check**:
+- Console should show logs like `[Delete Button] Clicked, deleting: [path]`
+- Server should return JSON response with success or error message
+- Check `Documents\RUIE-debug.log` for server-side issues
+
+---
+
+## Fixed Issues Archive
+
+### Issue: Compiled EXE Stuck at "Starting..." (February 1, 2026)
+- **Status**: ✅ **FIXED**
+- **Root Cause**: Flask server couldn't run as subprocess in frozen/compiled mode
+- **Solution**: Implemented dual-mode startup with Flask running as daemon thread in frozen mode
+- **Files Modified**: `launcher.py`, `server.py`, `build.bat`
+- **Result**: Compiled EXE now starts and runs correctly
+
+---
+
+## Reporting New Issues
+
+If you encounter a bug or issue:
+
+1. **Check this file** - your issue might be listed here
+2. **Check the logs** - review `Documents\RUIE-debug.log`
+3. **Describe the issue** including:
+   - Exact steps to reproduce
+   - What you expected to happen
+   - What actually happened
+   - Your Windows version and Python version (if running from source)
+4. **Include relevant logs** from debug file
+
+---
+
+## Future Improvements Planned
+
+- [ ] Support for macOS and Linux
+- [ ] Backup/extraction cloud sync
+- [ ] Theme sharing marketplace
+- [ ] Undo/redo for color changes
+- [ ] Advanced color picker with hex/RGB input
+- [ ] Batch media replacement
+- [ ] Theme preview before applying

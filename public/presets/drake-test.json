@@ -1,0 +1,78 @@
+{
+  "name": "Drake Test",
+  "description": "Custom preset",
+  "colors": {
+    "--sol-color-primary-1": "#0d0d0a",
+    "--sol-color-primary-1-rgb": "13 13 10",
+    "--sol-color-primary-2": "#141410",
+    "--sol-color-primary-2-rgb": "20 20 16",
+    "--sol-color-primary-3": "#1a1a14",
+    "--sol-color-primary-3-rgb": "26 26 20",
+    "--sol-color-primary-4": "#23231c",
+    "--sol-color-primary-4-rgb": "35 35 28",
+    "--sol-color-primary-5": "#133047",
+    "--sol-color-primary-5-rgb": "19 48 71",
+    "--sol-color-primary-6": "#3a3a2e",
+    "--sol-color-primary-6-rgb": "58 58 46",
+    "--sol-color-primary-7": "#f5b800",
+    "--sol-color-primary-7-rgb": "245 184 0",
+    "--sol-color-primary-8": "#ffd133",
+    "--sol-color-primary-8-rgb": "255 209 51",
+    "--sol-color-neutral-1": "#091219",
+    "--sol-color-neutral-1-rgb": "9 18 25",
+    "--sol-color-neutral-2": "#334048",
+    "--sol-color-neutral-2-rgb": "51 64 72",
+    "--sol-color-neutral-3": "#9fb1bf",
+    "--sol-color-neutral-3-rgb": "159 177 191",
+    "--sol-color-neutral-4": "#edf2f5",
+    "--sol-color-neutral-4-rgb": "237 242 245",
+    "--sol-color-accent-1": "#e6a500",
+    "--sol-color-accent-1-rgb": "230 165 0",
+    "--sol-color-accent-2": "#cc8800",
+    "--sol-color-accent-2-rgb": "204 136 0",
+    "--sol-color-accent-3": "#ffc933",
+    "--sol-color-accent-3-rgb": "255 201 51",
+    "--sol-color-positive-1": "#4caf50",
+    "--sol-color-positive-1-rgb": "76 175 80",
+    "--sol-color-positive-2": "#66bb6a",
+    "--sol-color-positive-2-rgb": "102 187 106",
+    "--sol-color-positive-3": "#81c784",
+    "--sol-color-positive-3-rgb": "129 199 132",
+    "--sol-color-notice-1": "#ff9800",
+    "--sol-color-notice-1-rgb": "255 152 0",
+    "--sol-color-notice-2": "#ffa726",
+    "--sol-color-notice-2-rgb": "255 167 38",
+    "--sol-color-notice-3": "#ffb74d",
+    "--sol-color-notice-3-rgb": "255 183 77",
+    "--sol-color-negative-1": "#f44336",
+    "--sol-color-negative-1-rgb": "244 67 54",
+    "--sol-color-negative-2": "#e57373",
+    "--sol-color-negative-2-rgb": "229 115 115",
+    "--sol-color-negative-3": "#ef5350",
+    "--sol-color-negative-3-rgb": "239 83 80",
+    "--sol-color-highlight-1": "#9c27b0",
+    "--sol-color-highlight-1-rgb": "156 39 176",
+    "--sol-color-highlight-2": "#ab47bc",
+    "--sol-color-highlight-2-rgb": "171 71 188",
+    "--sol-color-highlight-3": "#ba68c8",
+    "--sol-color-highlight-3-rgb": "186 104 200"
+  },
+  "media": {
+    "logo": "assets/logos/cig-logo.svg",
+    "background": "assets/images/sc_bg_fallback.jpg"
+  },
+  "music": [
+    {
+      "name": "GrimHex.ogg",
+      "isDefault": true
+    },
+    {
+      "name": "Murray Cup music.mp3",
+      "isDefault": true
+    },
+    {
+      "name": "StarMarine.ogg",
+      "isDefault": true
+    }
+  ]
+}
