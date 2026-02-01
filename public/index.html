@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RUIE</title>
     <link rel="icon" type="image/x-icon" href="/icon.ico">
-    <link rel="stylesheet" href="styles.css?v=8">
+    <link rel="stylesheet" href="styles.css?v=20260201d">
+    <script src="app.js?v=20260201" defer></script>
 </head>
 <body>
     <div class="container">
@@ -18,19 +19,18 @@
 
         <!-- Main Content Area -->
         <main class="content-wrapper">
-            <!-- Step 1: Initialize & Decompile (Combined) -->
+            <!-- Step 1: Initialize & Extract (Combined) -->
             <section class="step page" id="step-1" data-page="1">
-                <h2>Step 1: Prepare & Decompile</h2>
+                <h2>Step 1: Prepare & Extract</h2>
                 
                 <!-- Full Width: App.asar Detection -->
                 <div class="setup-panel" style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0;">App.asar Detection & Selection</h3>
-                        <label for="asarPath" style="color: #a0b0c0; font-size: 0.9em;">Path to app.asar:</label>
                     </div>
                     <div class="form-group" style="display: flex; align-items: center; gap: 15px; width: 100%;">
                         <div style="display: flex; align-items: center; gap: 10px; width: 50%;">
-                            <input type="text" id="asarPath" placeholder="C:\path\to\app.asar" style="flex: 1; cursor: pointer;" readonly>
+                            <input type="text" id="asarPath" placeholder="Path to app.asar" style="flex: 1; cursor: pointer;" readonly>
                             <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar" onclick="browseForAsar()">✓</span>
                         </div>
                         <div style="display: flex; gap: 10px; flex: 1; justify-content: flex-end;">
@@ -42,30 +42,34 @@
                     <div id="init-status" class="status"></div>
                 </div>
 
+                <!-- Hidden file input for manual asar selection -->
+                <input type="file" id="asarFileInput" style="display: none;" accept=".asar" onchange="handleAsarFileSelection(event)">
+
                 <!-- Two Columns: ASAR Manager + Backup Manager -->
                 <div class="setup-layout">
                     <!-- Left Column: ASAR Manager -->
                     <div class="setup-panel setup-left">
                         <h3>ASAR Manager</h3>
-                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Decompile and manage ASAR versions.</p>
+                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Extract and manage ASAR versions.</p>
                         
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Decompile app.asar</button>
-                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Decompiled</button>
+                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Extract app.asar</button>
+                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
                         </div>
 
                         <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
                             <div class="progress-bar" id="extract-progress-bar" style="width: 0%;"></div>
-                            <div class="progress-text" id="extract-progress-text">Preparing decompilation...</div>
+                            <div class="progress-text" id="extract-progress-text">Preparing extraction...</div>
                         </div>
                         <div id="extract-status" class="status"></div>
 
-                        <h4 style="color: #8db4d0; margin: 20px 0 10px 0; font-size: 0.95em;">Existing Decompilations</h4>
+                        <h4 style="color: #8db4d0; margin: 20px 0 10px 0; font-size: 0.95em;">Existing Extractions</h4>
                         <div id="extractsList" class="extracts-list">
                             <div class="extract-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">
-                                Loading decompilations...
+                                Loading extractions...
                             </div>
                         </div>
+                        <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.85em; padding: 8px 12px; width: calc(50% - 5px); display: block; margin-left: auto; margin-right: auto;" onclick="useSelectedExtract()">Use Selected</button>
                     </div>
 
                     <!-- Right Column: Backup Manager -->
@@ -73,21 +77,14 @@
                         <h3>Backup Manager</h3>
                         <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Manage your backups. Create snapshots before making changes.</p>
                         
-                        <div class="backup-actions" style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 6px 10px;" onclick="createNewBackup()">📦 Create New Backup</button>
-                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 6px 10px;" onclick="restoreLatestBackup()">↻ Restore Latest</button>
+                        <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center;">
+                            <button class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
                         </div>
-
-                        <div id="backup-progress" class="progress" style="display: none; margin-top: 15px;">
-                            <div class="progress-bar" id="backup-progress-bar" style="width: 0%;"></div>
-                            <div class="progress-text" id="backup-progress-text">Creating backup...</div>
-                        </div>
-                        <div id="backup-status" class="status"></div>
 
                         <h4 style="color: #8db4d0; margin: 15px 0 10px 0; font-size: 0.95em;">Existing Backups</h4>
                         <div id="backupsList" class="backups-list">
                             <div class="backup-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">
-                                Loading backups...
+                                No backups yet. Create one to get started.
                             </div>
                         </div>
                     </div>
@@ -179,10 +176,10 @@
                         <div id="media-status" class="status" style="margin-top: 15px;"></div>
                     </div>
 
-                    <div class="preview-panel media-preview-panel" style="display: flex; flex-direction: column;">
-                        <div class="preview-header">Media Preview</div>
-                        <div id="mediaPreviewContainer" class="media-side-preview-container"></div>
-                        <div style="padding: 15px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid rgba(0, 212, 255, 0.15);">
+                    <div class="preview-panel" style="display: flex; flex-direction: column;">
+                        <div class="preview-header">Live Theme Preview</div>
+                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview" style="flex: 1;"></iframe>
+                        <div style="padding: 15px; border-top: 1px solid rgba(0, 212, 255, 0.15);">
                             <button class="btn btn-primary" style="width: 100%;" onclick="applyMedia()">Apply Media Changes</button>
                         </div>
                     </div>
@@ -234,70 +231,51 @@
 
             <!-- Step 5: Finalize -->
             <section class="step page" id="step-5" data-page="5" style="display: none;">
-                <h2>Step 5: Finalize & Deploy</h2>
-                <p>Save and test your customizations, then compile and install the modified launcher.</p>
+                <h2>Step 5: Repack, Test & Finalize</h2>
+                <p>Compile your changes and test the modified launcher.</p>
 
-                <!-- Full Width: Save & Export Section -->
-                <div class="setup-panel" style="margin-bottom: 20px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                        <h3 style="margin: 0;">Save & Export Configuration</h3>
+                <div class="split-layout">
+                    <div class="editor-panel">
+                        <div class="preset-selector-container">
+                            <label for="preset-selector" class="preset-label">Select a Manufacturer Preset:</label>
+                            <select id="preset-selector" class="preset-dropdown" onchange="handlePresetChange(this.value)">
+                                <option value="">Select a manufacturer preset...</option>
+                                <option value="rsi">RSI</option>
+                                <option value="aegis-dynamics">Aegis Dynamics</option>
+                                <option value="anvil-aerospace">Anvil Aerospace</option>
+                                <option value="aopoa">Aopoa</option>
+                                <option value="argo">Argo Astronautics</option>
+                                <option value="banu">Banu</option>
+                                <option value="consolidated-outland">Consolidated Outland</option>
+                                <option value="crusader-industries">Crusader Industries</option>
+                                <option value="drake-interplanetary">Drake Interplanetary</option>
+                                <option value="esperia">Esperia</option>
+                                <option value="gatac">Gatac Manufacture</option>
+                                <option value="greycat">Greycat Industrial</option>
+                                <option value="kruger">Kruger Intergalactic</option>
+                                <option value="misc">MISC</option>
+                                <option value="origin-jumpworks">Origin Jumpworks</option>
+                                <option value="tumbril">Tumbril Land Systems</option>
+                                <option value="vanduul">Vanduul</option>
+                                <option value="c3rb">C3RB (Custom)</option>
+                            </select>
+                        </div>
+
+                        <div class="color-mappings">
+                            <div id="colorList" class="color-list"></div>
+                            <button class="btn btn-secondary" onclick="addColorMapping()">+ Add Color Mapping</button>
+                        </div>
+
+                        <button class="btn btn-primary" onclick="applyColors()">Apply Colors</button>
+                        <div id="colors-status" class="status"></div>
                     </div>
-                    <div style="display: flex; flex-direction: column; gap: 15px;">
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="presetNameInput" placeholder="Enter preset name..." class="preset-name-input" style="flex: 1;">
-                            <button class="btn btn-primary" onclick="saveCurrentPreset()" style="font-size: 0.85em; padding: 8px 12px; white-space: nowrap;">💾 Save Preset</button>
-                            <button class="btn btn-secondary" onclick="exportCurrentPreset()" style="font-size: 0.85em; padding: 8px 12px; white-space: nowrap;">📤 Export as JSON</button>
-                        </div>
-                        <div id="save-export-status" class="status"></div>
-                    </div>
-                </div>
 
-                <!-- Two Columns: Test & Compile -->
-                <div class="setup-layout">
-                    <!-- Left Column: Test Preset -->
-                    <div class="setup-panel setup-left">
-                        <h3>🧪 Test Preset</h3>
-                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Launch the modified launcher to test your customizations in real-time.</p>
-                        
-                        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="testPreset()">Launch Test</button>
-                        </div>
-
-                        <div id="test-preset-status" class="status"></div>
-                        
-                        <h4 style="color: #8db4d0; margin: 20px 0 10px 0; font-size: 0.95em;">Testing Tips</h4>
-                        <div style="background: rgba(0, 100, 150, 0.15); border-left: 3px solid rgba(0, 212, 255, 0.3); padding: 12px; border-radius: 0; color: #a0b0c0; font-size: 0.85em; line-height: 1.6;">
-                            <p style="margin: 0 0 8px 0;">✓ Check colors are applied correctly</p>
-                            <p style="margin: 0 0 8px 0;">✓ Verify media files display properly</p>
-                            <p style="margin: 0;">✓ Test music playback if applicable</p>
-                        </div>
-                    </div>
-
-                    <!-- Right Column: Compile & Install -->
-                    <div class="setup-panel setup-right">
-                        <h3>⚙️ Compile & Install</h3>
-                        <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Compile the modified app.asar and install to the launcher.</p>
-                        
-                        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
-                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="compileAsar()">Compile Only</button>
-                            <button class="btn btn-success" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="installAsar()">Compile & Install</button>
-                        </div>
-
-                        <div id="compile-status" class="status"></div>
-
-                        <h4 style="color: #8db4d0; margin: 20px 0 10px 0; font-size: 0.95em;">Installation Notes</h4>
-                        <div style="background: rgba(150, 100, 100, 0.15); border-left: 3px solid rgba(255, 128, 128, 0.3); padding: 12px; border-radius: 0; color: #a0b0c0; font-size: 0.85em; line-height: 1.6;">
-                            <p style="margin: 0 0 8px 0;">⚠ Original app.asar will be backed up</p>
-                            <p style="margin: 0 0 8px 0;">⚠ Restart the launcher to apply changes</p>
-                            <p style="margin: 0;">⚠ You can restore the backup anytime</p>
-                        </div>
+                    <div class="preview-panel">
+                        <div class="preview-header">Live Theme Preview</div>
+                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview"></iframe>
                     </div>
                 </div>
-
-                <div class="page-navigation" style="margin-top: 20px;">
-                    <button class="btn btn-secondary" onclick="navigateToPage(4)">← Back</button>
-                    <button class="btn btn-secondary" onclick="navigateToPage(1)">Start Over</button>
-                </div>
+                <div id="backupsList" class="backups-list"></div>
             </section>
         </main>
 
@@ -342,6 +320,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=12"></script>
+    <script src="app.js?v=20260201g"></script>
 </body>
 </html>

@@ -5,9 +5,6 @@ console.log('[app.js] Script loaded at', new Date().toISOString());
 const state = {
     initialized: false,
     extracted: false,
-    extractedPath: null,  // Path of selected extraction
-    extractedCount: 0,  // Track if user has extracted or selected an extraction
-    backupsCount: 0,    // Track number of backups
     colors: {}, // Will be initialized after preset files are loaded
     media: {},
     music: [], // Array of music files: [{ name: 'track1.ogg', file: File }, ...]
@@ -17,7 +14,8 @@ const state = {
         media: {},
         music: []
     },
-    currentPage: 1
+    currentPage: 1,
+    selectedExtractPath: null // Track selected extract for "Use Selected" button
 };
 
 // Persisted preview state for syncing across steps/iframes
@@ -37,6 +35,7 @@ const DOM = {
     extractProgressText: null,
     extractBtn: null,
     extractStatus: null,
+    extractSelect: null,
     initStatus: null,
     colorList: null,
     backBtn: null,
@@ -52,6 +51,7 @@ const DOM = {
         this.extractProgressText = document.getElementById('extract-progress-text');
         this.extractBtn = document.getElementById('extract-btn');
         this.extractStatus = document.getElementById('extract-status');
+        this.extractSelect = document.getElementById('extractSelect');
         this.initStatus = document.getElementById('init-status');
         this.colorList = document.getElementById('colorList');
         this.backBtn = document.getElementById('backBtn');
@@ -85,35 +85,8 @@ function debounce(func, wait) {
     };
 }
 
-// Security: Escape HTML to prevent XSS vulnerabilities
-function escapeHtml(unsafe) {
-    if (!unsafe) return '';
-    return String(unsafe)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#039;');
-}
-
 // Page navigation system
 function navigateToPage(pageNumber) {
-    // Validate navigation from page 1 to page 2
-    if (pageNumber === 2 && state.currentPage === 1) {
-        if (!state.initialized) {
-            showStatus('init-status', 'Please initialize the launcher first', 'error');
-            return;
-        }
-        if (!state.extracted && state.extractedCount === 0) {
-            showStatus('init-status', 'Please extract or select an existing extraction to proceed', 'error');
-            return;
-        }
-        if (state.backupsCount === 0) {
-            showStatus('init-status', 'Please create a backup before proceeding', 'error');
-            return;
-        }
-    }
-    
     // Hide all pages using cached elements
     DOM.pages.forEach(page => page.style.display = 'none');
     
@@ -460,34 +433,42 @@ async function loadPresetFiles() {
 }
 
 /**
+ * Handle file selection from HTML5 file input
+ */
+function handleAsarFileSelection(event) {
+    const file = event.target.files[0];
+    if (file) {
+        // For browser environment, we display the file name
+        // In production with file API backend, this would handle the actual file
+        DOM.asarPath.value = file.name;
+        
+        // Show success indicator
+        const pathIndicator = document.getElementById('path-success-indicator');
+        if (pathIndicator) pathIndicator.style.display = 'block';
+        
+        // Clear any previous status messages
+        const statusEl = document.getElementById('init-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.style.display = 'none';
+        }
+        
+        // Auto-initialize after path is set
+        setTimeout(() => initSession(), 100);
+    }
+}
+
+/**
  * Open file picker dialog for user to select app.asar file
  */
-async function browseForAsar() {
-    try {
-        const response = await fetch('/api/browse-for-asar', {
-            method: 'POST'
-        });
-        const data = await response.json();
-
-        if (data.success && data.path) {
-            DOM.asarPath.value = data.path;
-            
-            // Show success indicator
-            const pathIndicator = document.getElementById('path-success-indicator');
-            if (pathIndicator) pathIndicator.style.display = 'block';
-            
-            // Clear any previous status messages
-            const statusEl = document.getElementById('init-status');
-            if (statusEl) {
-                statusEl.textContent = '';
-                statusEl.style.display = 'none';
-            }
-            
-            // Auto-initialize after path is set
-            await initSession();
-        }
-    } catch (error) {
-        console.error('Error browsing for asar:', error);
+function browseForAsar() {
+    console.log('[browseForAsar] Opening file picker');
+    const fileInput = document.getElementById('asarFileInput');
+    if (fileInput) {
+        fileInput.click();
+    } else {
+        // Fallback if file input doesn't exist
+        showStatus('init-status', 'File picker not available. Enter path manually or use Auto-Detect.', 'warning');
     }
 }
 
@@ -498,6 +479,11 @@ async function detectLauncher(options = {}) {
     const { autoInit = false, silentFailure = false } = options;
 
     try {
+        console.log('[detectLauncher] Starting auto-detect...');
+        
+        // Show loading feedback
+        showStatus('init-status', 'Auto-detecting RSI Launcher...', 'info');
+        
         console.log('[detectLauncher] Fetching /api/detect-launcher');
         const response = await fetch('/api/detect-launcher');
         const data = await response.json();
@@ -508,28 +494,40 @@ async function detectLauncher(options = {}) {
             throw new Error(data.error || data.message || 'Launcher not found');
         }
 
+        if (!data.launcher || !data.launcher.asarPath) {
+            throw new Error('Launcher detected but asar path is missing');
+        }
+
         console.log('[detectLauncher] Setting path to:', data.launcher.asarPath);
+        
+        // Ensure DOM is initialized
+        if (!DOM.asarPath) {
+            DOM.init();
+        }
+        
         DOM.asarPath.value = data.launcher.asarPath;
         
         // Show success indicator next to path field
         const pathIndicator = document.getElementById('path-success-indicator');
-        if (pathIndicator) pathIndicator.style.display = 'block';
+        if (pathIndicator) {
+            pathIndicator.style.display = 'block';
+        }
         
-        // Clear any previous status messages - hide the status element completely
+        // Clear status message - the green checkmark is sufficient feedback
         const statusEl = document.getElementById('init-status');
         if (statusEl) {
             statusEl.textContent = '';
             statusEl.style.display = 'none';
         }
 
-        if (autoInit) {
-            await initSession();
-        }
+        // Auto-initialize after path is detected
+        console.log('[detectLauncher] Auto-initializing session');
+        await initSession();
 
     } catch (error) {
         console.error('[detectLauncher] Error:', error.message);
         if (!silentFailure) {
-            showStatus('init-status', error.message, 'error');
+            showStatus('init-status', '✗ Error: ' + error.message, 'error');
         }
     }
 }
@@ -595,7 +593,15 @@ async function initSession() {
             initBtn.innerHTML = '✓';
         }
         
-        showStatus('init-status', '✓ Initialized successfully. You can now extract, open previous extractions, or manage your extractions.', 'success');
+        // Clear status message - the green checkmark is sufficient feedback
+        const statusEl = document.getElementById('init-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.style.display = 'none';
+        }
+        
+        // Load extracted list but don't auto-navigate
+        loadExtractedList();
 
     } catch (error) {
         showStatus('init-status', error.message, 'error');
@@ -659,7 +665,7 @@ async function extractAsar() {
     const statusEl = document.getElementById('extract-status');
     if (statusEl) statusEl.style.display = 'none';
     
-    setExtractProgress(true, 5, 'Starting decompilation...');
+    setExtractProgress(true, 5, 'Starting extraction...');
     startExtractPolling();
 
     try {
@@ -677,16 +683,15 @@ async function extractAsar() {
 
         if (!response.ok) {
             const details = data.details ? ` (${data.details})` : '';
-            throw new Error((data.error || 'Failed to decompile') + details);
+            throw new Error((data.error || 'Failed to extract') + details);
         }
 
         state.extracted = true;
-        setExtractProgress(true, 100, 'Decompilation complete');
-        showStatus('extract-status', '✓ Decompiled successfully', 'success');
+        setExtractProgress(true, 100, 'Extraction complete');
+        showStatus('extract-status', '✓ Extracted successfully', 'success');
         
-        // Reload both lists to show the new decompilation and any backups created during decompilation
-        console.log('[extractAsar] Reloading both lists');
-        await reloadBothLists();
+        // Reload the extracted ASAR list to show the new extraction
+        await loadExtractedASARList();
         
         // Navigate to Colors page (page 2)
         setTimeout(() => {
@@ -699,7 +704,7 @@ async function extractAsar() {
             ? 'Failed to fetch. The local server may have stopped. Please restart the app.'
             : error.message;
         showStatus('extract-status', message, 'error');
-        setExtractProgress(true, 0, 'Decompilation failed');
+        setExtractProgress(true, 0, 'Extraction failed');
     } finally {
         if (extractButton) extractButton.disabled = false;
     }
@@ -709,31 +714,164 @@ async function extractAsar() {
  * Open the latest extracted folder
  */
 async function openLatestExtract() {
-    showStatus('extract-status', 'Loading latest decompiled folder...', 'info');
+    showStatus('extract-status', 'Opening latest extracted folder...', 'info');
 
     try {
-        // Fetch the list of decompiled folders
-        const response = await fetch('/api/extracted-list');
+        const response = await fetch('/api/open-latest-extract', {
+            method: 'POST'
+        });
+
         const data = await response.json();
 
-        if (!response.ok || !data.extracts || data.extracts.length === 0) {
-            throw new Error('No decompiled folders found');
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to open extracted folder');
         }
 
-        // Get the first (most recent) decompilation
-        const latestDecompilation = data.extracts[0];
-        console.log('[openLatestExtract] Loading latest decompilation:', latestDecompilation.name, 'path:', latestDecompilation.path);
-
-        // Use the latest decompilation
-        await useExtractedASAR(latestDecompilation.path);
-        showStatus('extract-status', `✓ Loaded: ${latestDecompilation.name}`, 'success');
+        showStatus('extract-status', `✓ Opened: ${data.path}`, 'success');
     } catch (error) {
-        console.error('[openLatestExtract] Error:', error);
         showStatus('extract-status', error.message, 'error');
     }
 }
 
+async function loadExtractedList() {
+    const select = document.getElementById('extractSelect');
+    if (!select) {
+        console.log('extractSelect element not found');
+        return;
+    }
 
+    try {
+        console.log('Fetching /api/extracted-list...');
+        const response = await fetch('/api/extracted-list');
+        console.log('Response status:', response.status, 'Content-Type:', response.headers.get('Content-Type'));
+        
+        if (!response.ok) {
+            console.error('Response not OK:', response.status, response.statusText);
+            const text = await response.text();
+            console.error('Response body:', text.substring(0, 200));
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
+        console.log('Extracted list data:', data);
+
+        const extracts = data.extracts || [];
+        select.innerHTML = '';
+        
+        if (!extracts.length) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = 'No extracted folders found';
+            select.appendChild(option);
+            console.log('No extracted folders found');
+            return;
+        }
+
+        const optionDefault = document.createElement('option');
+        optionDefault.value = '';
+        optionDefault.textContent = 'Select a previous extraction...';
+        select.appendChild(optionDefault);
+
+        extracts.forEach((item) => {
+            const option = document.createElement('option');
+            option.value = item.path;
+            option.textContent = `${item.name} (${item.date})`;
+            select.appendChild(option);
+        });
+        
+        console.log(`Loaded ${extracts.length} extracted folders`);
+    } catch (error) {
+        console.error('Error loading extracted list:', error);
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'Error: ' + error.message;
+        select.innerHTML = '';
+        select.appendChild(option);
+    }
+}
+
+async function useSelectedExtract() {
+    const select = document.getElementById('extractSelect');
+    const selected = select?.value || '';
+
+    if (!selected) {
+        showStatus('extract-status', 'No extracted folder selected', 'error');
+        return;
+    }
+
+    showStatus('extract-status', 'Using selected extracted folder...', 'info');
+
+    try {
+        const response = await fetch('/api/use-extract', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: selected })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to use extracted folder');
+        }
+
+        state.extracted = true;
+        
+        // Show what changes were made to this extraction
+        if (data.changes && (data.changes.colors || data.changes.media)) {
+            let changesText = '✓ Using selected extracted folder\n\nDetected changes:\n';
+            if (data.changes.colors && Object.keys(data.changes.colors).length > 0) {
+                changesText += `\n🎨 ${Object.keys(data.changes.colors).length} color(s) changed`;
+            }
+            if (data.changes.media && Object.keys(data.changes.media).length > 0) {
+                changesText += `\n🎬 ${Object.keys(data.changes.media).length} media file(s) replaced`;
+            }
+            showStatus('extract-status', changesText, 'success');
+        } else {
+            showStatus('extract-status', '✓ Using selected extracted folder (no changes detected)', 'success');
+        }
+
+        setTimeout(() => {
+            navigateToPage(2);
+            document.getElementById('extract-status').style.display = 'none';
+        }, 500);
+    } catch (error) {
+        showStatus('extract-status', error.message, 'error');
+    }
+}
+
+/**
+ * Select an extract item and highlight it
+ */
+function selectExtract(path, element) {
+    // Remove previous selection
+    const extractsList = document.getElementById('extractsList');
+    if (extractsList) {
+        const previousSelected = extractsList.querySelector('.extract-item.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+            previousSelected.style.borderColor = '';
+            previousSelected.style.background = '';
+        }
+    }
+    
+    // Add selection to current item
+    state.selectedExtractPath = path;
+    element.classList.add('selected');
+    element.style.borderColor = 'rgba(0, 212, 255, 0.5)';
+    element.style.background = 'rgba(0, 212, 255, 0.1)';
+}
+
+/**
+ * Use the selected extract from the list
+ */
+async function useSelectedExtract() {
+    if (!state.selectedExtractPath) {
+        showStatus('extract-status', 'Please select an extraction first', 'error');
+        return;
+    }
+
+    await useExtractedASAR(state.selectedExtractPath);
+}
 
 /**
  * Load and display backups list
@@ -742,19 +880,15 @@ async function loadBackupsList() {
     const backupsList = document.getElementById('backupsList');
     if (!backupsList) return;
 
-    console.log('[loadBackupsList] Loading backups from server');
     try {
         const response = await fetch('/api/backups');
         const data = await response.json();
 
-        console.log('[loadBackupsList] Response:', data);
         if (!response.ok) {
             throw new Error(data.error || 'Failed to load backups');
         }
 
         const backups = data.backups || [];
-        state.backupsCount = backups.length;  // Track backup count
-        console.log('[loadBackupsList] Found', backups.length, 'backups');
 
         if (backups.length === 0) {
             backupsList.innerHTML = '<div class="backup-item-empty">No backups yet. Create one to get started.</div>';
@@ -763,7 +897,6 @@ async function loadBackupsList() {
 
         backupsList.innerHTML = '';
         backups.forEach((backup) => {
-            console.log('[loadBackupsList] Processing backup:', backup.name);
             const backupDiv = document.createElement('div');
             backupDiv.className = 'backup-item';
             
@@ -776,10 +909,7 @@ async function loadBackupsList() {
             
             const dateDiv = document.createElement('div');
             dateDiv.className = 'backup-item-date';
-            // Parse date format YYYYMMDD-HHMMSS
-            const dateStr = backup.date || backup.name;
-            const formatted = formatBackupDate(dateStr);
-            dateDiv.textContent = formatted;
+            dateDiv.textContent = new Date(backup.date).toLocaleString();
             
             infoDiv.appendChild(nameDiv);
             infoDiv.appendChild(dateDiv);
@@ -790,21 +920,12 @@ async function loadBackupsList() {
             const restoreBtn = document.createElement('button');
             restoreBtn.className = 'btn btn-secondary';
             restoreBtn.textContent = '↻ Restore';
-            restoreBtn.onclick = () => {
-                console.log('[Restore Button] Clicked, restoring:', backup.path || backup.name);
-                restoreBackup(backup.path || backup.name);
-            };
-            console.log('[loadBackupsList] Restore button created, onclick assigned:', typeof restoreBtn.onclick);
+            restoreBtn.onclick = () => restoreBackup(backup.id || backup.name);
             
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn btn-secondary';
             deleteBtn.textContent = '✕ Delete';
-            deleteBtn.title = 'Delete this backup';
-            deleteBtn.onclick = () => {
-                console.log('[Delete Button] Clicked, deleting:', backup.path);
-                deleteBackup(backup.path);
-            };
-            console.log('[loadBackupsList] Delete button created, onclick assigned:', typeof deleteBtn.onclick);
+            deleteBtn.onclick = () => deleteBackup(backup.id || backup.name);
             
             actionsDiv.appendChild(restoreBtn);
             actionsDiv.appendChild(deleteBtn);
@@ -812,60 +933,23 @@ async function loadBackupsList() {
             backupDiv.appendChild(infoDiv);
             backupDiv.appendChild(actionsDiv);
             backupsList.appendChild(backupDiv);
-            console.log('[loadBackupsList] Backup item appended to DOM');
         });
-        
     } catch (error) {
         console.error('Error loading backups:', error);
         backupsList.innerHTML = `<div class="backup-item-empty">Error: ${error.message}</div>`;
     }
 }
 
-
-/**
- * Format backup date from YYYYMMDD-HHMMSS format
- */
-function formatBackupDate(dateStr) {
-    // Handle format: backup-20260201-121940 or 20260201-121940
-    const match = dateStr.match(/(\d{8})-(\d{6})/);
-    if (!match) return dateStr;
-    
-    const [, dateOnly, timeOnly] = match;
-    const year = dateOnly.substring(0, 4);
-    const month = dateOnly.substring(4, 6);
-    const day = dateOnly.substring(6, 8);
-    const hour = timeOnly.substring(0, 2);
-    const min = timeOnly.substring(2, 4);
-    const sec = timeOnly.substring(4, 6);
-    
-    return `${year}-${month}-${day} ${hour}:${min}:${sec}`;
-}
-
 /**
  * Create a new backup
  */
 async function createNewBackup() {
-    console.log('[createNewBackup] Starting backup creation, initialized:', state.initialized);
-    
     if (!state.initialized) {
-        console.log('[createNewBackup] Not initialized, aborting');
-        showStatus('backup-status', 'Please initialize a session first', 'error');
+        showStatus('init-status', 'Please initialize a session first', 'error');
         return;
     }
 
-    const progressDiv = document.getElementById('backup-progress');
-    const progressBar = document.getElementById('backup-progress-bar');
-    const progressText = document.getElementById('backup-progress-text');
-    
-    if (progressDiv) progressDiv.style.display = 'block';
-    if (progressBar) progressBar.style.width = '30%';
-    if (progressText) progressText.textContent = 'Backup in progress...';
-
     try {
-        console.log('[createNewBackup] Sending POST request to /api/backups');
-        if (progressBar) progressBar.style.width = '50%';
-        if (progressText) progressText.textContent = 'Backup in progress...';
-        
         const response = await fetch('/api/backups', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -874,89 +958,30 @@ async function createNewBackup() {
             })
         });
 
-        console.log('[createNewBackup] Response status:', response.status, response.statusText);
         const data = await response.json();
-        console.log('[createNewBackup] Response data:', data);
 
         if (!response.ok) {
             throw new Error(data.error || 'Failed to create backup');
         }
 
-        if (progressBar) progressBar.style.width = '100%';
-        if (progressText) progressText.textContent = '✓ Backup completed';
-        console.log('[createNewBackup] Reloading both lists');
-        
-        // Hide progress after 2 seconds
-        setTimeout(() => {
-            if (progressDiv) progressDiv.style.display = 'none';
-            if (progressBar) progressBar.style.width = '0%';
-        }, 2000);
-        
-        await reloadBothLists();
+        showStatus('init-status', '✓ Backup created successfully', 'success');
+        await loadBackupsList();
     } catch (error) {
-        console.error('[createNewBackup] Error:', error);
-        if (progressText) progressText.textContent = '✕ Backup failed';
-        if (progressBar) progressBar.style.width = '0%';
-        setTimeout(() => {
-            if (progressDiv) progressDiv.style.display = 'none';
-        }, 3000);
-    }
-}
-
-/**
- * Restore the latest backup
- */
-async function restoreLatestBackup() {
-    try {
-        console.log('[restoreLatestBackup] Fetching latest backup');
-        const response = await fetch('/api/backups');
-        const data = await response.json();
-        
-        if (!response.ok || !data.backups || data.backups.length === 0) {
-            showStatus('backup-status', 'No backups available to restore', 'error');
-            return;
-        }
-        
-        // Get the most recent backup (first in list)
-        const latestBackup = data.backups[0];
-        console.log('[restoreLatestBackup] Found latest backup:', latestBackup.name);
-        
-        if (!confirm(`Restore latest backup (${latestBackup.name})? Current changes will be overwritten.`)) {
-            return;
-        }
-        
-        await restoreBackup(latestBackup.path || latestBackup.name);
-    } catch (error) {
-        console.error('[restoreLatestBackup] Error:', error);
-        showStatus('backup-status', 'Failed to restore latest backup: ' + error.message, 'error');
+        showStatus('init-status', error.message, 'error');
     }
 }
 
 /**
  * Restore a backup
  */
-async function restoreBackup(backupPath) {
+async function restoreBackup(backupId) {
     if (!confirm('Are you sure you want to restore this backup? Current changes will be overwritten.')) {
         return;
     }
 
-    const progressDiv = document.getElementById('backup-progress');
-    const progressBar = document.getElementById('backup-progress-bar');
-    const progressText = document.getElementById('backup-progress-text');
-    
-    if (progressDiv) progressDiv.style.display = 'block';
-    if (progressBar) progressBar.style.width = '30%';
-    if (progressText) progressText.textContent = 'Starting restore...';
-
     try {
-        console.log('[restoreBackup] Restoring from:', backupPath);
-        if (progressBar) progressBar.style.width = '50%';
-        if (progressText) progressText.textContent = 'Restoring backup files...';
-        
-        const response = await fetch('/api/restore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: backupPath })
+        const response = await fetch(`/api/backups/${backupId}/restore`, {
+            method: 'POST'
         });
 
         const data = await response.json();
@@ -965,56 +990,36 @@ async function restoreBackup(backupPath) {
             throw new Error(data.error || 'Failed to restore backup');
         }
 
-        if (progressBar) progressBar.style.width = '100%';
-        if (progressText) progressText.textContent = '✓ Backup restored successfully';
-        showStatus('backup-status', '✓ Backup restored successfully', 'success');
-        
-        setTimeout(() => {
-            if (progressDiv) progressDiv.style.display = 'none';
-            if (progressBar) progressBar.style.width = '0%';
-        }, 1500);
-        
-        await reloadBothLists();
+        showStatus('init-status', '✓ Backup restored successfully', 'success');
+        await loadBackupsList();
     } catch (error) {
-        console.error('[restoreBackup] Error:', error);
-        if (progressText) progressText.textContent = '✕ Restore failed';
-        if (progressBar) progressBar.style.width = '0%';
-        showStatus('backup-status', error.message, 'error');
-        setTimeout(() => {
-            if (progressDiv) progressDiv.style.display = 'none';
-        }, 3000);
+        showStatus('init-status', error.message, 'error');
     }
 }
 
 /**
  * Delete a backup
  */
-async function deleteBackup(backupPath) {
-    console.log('[deleteBackup] Called with path:', backupPath);
+async function deleteBackup(backupId) {
+    if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
+        return;
+    }
 
     try {
-        console.log('[deleteBackup] Sending DELETE request to /api/delete-backup with path:', backupPath);
-        const response = await fetch('/api/delete-backup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: backupPath })
+        const response = await fetch(`/api/backups/${backupId}`, {
+            method: 'DELETE'
         });
 
-        console.log('[deleteBackup] Response status:', response.status);
         const data = await response.json();
-        console.log('[deleteBackup] Response data:', data);
 
         if (!response.ok) {
-            console.error('[deleteBackup] Error response:', data);
-            throw new Error(data.error || `Failed to delete backup (HTTP ${response.status})`);
+            throw new Error(data.error || 'Failed to delete backup');
         }
 
-        console.log('[deleteBackup] Success, reloading both lists');
-        showStatus('backup-status', '✓ Backup deleted successfully', 'success');
-        await reloadBothLists();
+        showStatus('init-status', '✓ Backup deleted successfully', 'success');
+        await loadBackupsList();
     } catch (error) {
-        console.error('[deleteBackup] Error:', error);
-        showStatus('backup-status', error.message, 'error');
+        showStatus('init-status', error.message, 'error');
     }
 }
 
@@ -1022,7 +1027,6 @@ async function deleteBackup(backupPath) {
  * Load and display extracted ASAR list
  */
 async function loadExtractedASARList() {
-    console.log('[loadExtractedASARList] Loading extracts, current extractedPath:', state.extractedPath);
     const extractsList = document.getElementById('extractsList');
     if (!extractsList) {
         console.log('extractsList element not found');
@@ -1034,29 +1038,25 @@ async function loadExtractedASARList() {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to load decompilations');
+            throw new Error(data.error || 'Failed to load extractions');
         }
 
         const extracts = data.extracts || [];
-        state.extractedCount = extracts.length;  // Track extraction count
 
         if (extracts.length === 0) {
-            extractsList.innerHTML = '<div class="extract-item-empty">No decompiled ASARs yet. Decompile one to get started.</div>';
+            extractsList.innerHTML = '<div class="extract-item-empty">No extracted ASARs yet. Extract one to get started.</div>';
             return;
         }
 
         extractsList.innerHTML = '';
         extracts.forEach((extract) => {
-            console.log('[loadExtractedASARList] Processing extract:', extract.path);
             const extractDiv = document.createElement('div');
             extractDiv.className = 'extract-item';
-            extractDiv.style.cursor = 'pointer';
+            extractDiv.id = 'extract-' + extract.path.replace(/[\\/:]/g, '_');
             
-            // Check if this is the currently selected extraction
-            if (state.extractedPath === extract.path) {
-                console.log('[loadExtractedASARList] Found selected extraction, adding glow class');
-                extractDiv.classList.add('extract-item-selected');
-            }
+            // Make the entire item clickable to select it
+            extractDiv.style.cursor = 'pointer';
+            extractDiv.onclick = () => selectExtract(extract.path, extractDiv);
             
             const infoDiv = document.createElement('div');
             infoDiv.className = 'extract-item-info';
@@ -1067,9 +1067,7 @@ async function loadExtractedASARList() {
             
             const dateDiv = document.createElement('div');
             dateDiv.className = 'extract-item-date';
-            const dateStr = extract.date || extract.name;
-            const formatted = formatBackupDate(dateStr);
-            dateDiv.textContent = `Extracted: ${formatted}`;
+            dateDiv.textContent = `Extracted: ${extract.date}`;
             
             infoDiv.appendChild(nameDiv);
             infoDiv.appendChild(dateDiv);
@@ -1077,30 +1075,30 @@ async function loadExtractedASARList() {
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'extract-item-actions';
             
+            const useBtn = document.createElement('button');
+            useBtn.className = 'btn btn-secondary';
+            useBtn.textContent = '↻ Use';
+            useBtn.title = 'Load this extraction';
+            useBtn.onclick = (e) => {
+                e.stopPropagation();
+                useExtractedASAR(extract.path);
+            };
+            
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn btn-secondary';
             deleteBtn.textContent = '✕ Delete';
             deleteBtn.title = 'Delete this extraction';
-            deleteBtn.onclick = () => {
-                console.log('[Extract Delete Button] Clicked, deleting:', extract.path, extract.name);
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
                 deleteExtractedASAR(extract.path, extract.name);
             };
-            console.log('[loadExtractedASARList] Delete button created, onclick assigned:', typeof deleteBtn.onclick);
             
+            actionsDiv.appendChild(useBtn);
             actionsDiv.appendChild(deleteBtn);
             
             extractDiv.appendChild(infoDiv);
             extractDiv.appendChild(actionsDiv);
-            
-            // Click handler on the main item to select it
-            extractDiv.onclick = () => {
-                console.log('[Extract Item] Clicked to select:', extract.path);
-                useExtractedASAR(extract.path);
-            };
-            console.log('[loadExtractedASARList] Extract item click handler assigned');
-            
             extractsList.appendChild(extractDiv);
-            console.log('[loadExtractedASARList] Extract item appended to DOM');
         });
     } catch (error) {
         console.error('Error loading extracted ASAR list:', error);
@@ -1108,47 +1106,33 @@ async function loadExtractedASARList() {
     }
 }
 
-
 /**
  * Use an extracted ASAR folder
  */
 async function useExtractedASAR(path) {
-    console.log('[useExtractedASAR] Starting selection of path:', path);
     showStatus('init-status', 'Loading extracted ASAR...', 'info');
 
     try {
-        console.log('[useExtractedASAR] Sending POST to /api/use-extract');
         const response = await fetch('/api/use-extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path })
         });
 
-        console.log('[useExtractedASAR] Response status:', response.status);
         const data = await response.json();
-        console.log('[useExtractedASAR] Response data:', data);
 
         if (!response.ok) {
-            throw new Error(data.error || 'Failed to load decompilation');
+            throw new Error(data.error || 'Failed to load extraction');
         }
 
         state.initialized = true;
         state.extractedPath = data.extractedPath;
-        state.extracted = true;  // Mark that extraction is selected
         
-        // Ensure extractedCount is at least 1 since we've selected an extraction
-        if (state.extractedCount === 0) {
-            state.extractedCount = 1;
-        }
+        showStatus('init-status', '✓ Extracted ASAR loaded successfully. Click "Next" to continue.', 'success');
         
-        console.log('[useExtractedASAR] Updated state:', { initialized: state.initialized, extracted: state.extracted, extractedPath: state.extractedPath });
-        showStatus('init-status', '✓ Extraction selected. You can now proceed to the next step.', 'success');
-        
-        // Reload the list to show current selection with green glow
-        console.log('[useExtractedASAR] Reloading list to show selection');
+        // Reload the list to show current selection
         await loadExtractedASARList();
     } catch (error) {
-        console.error('[useExtractedASAR] Error:', error);
         showStatus('init-status', error.message, 'error');
     }
 }
@@ -1157,36 +1141,27 @@ async function useExtractedASAR(path) {
  * Delete an extracted ASAR folder
  */
 async function deleteExtractedASAR(path, name) {
-    console.log('[deleteExtractedASAR] Called with path:', path, 'name:', name);
+    if (!confirm(`Are you sure you want to delete the extracted ASAR "${name}"? This will remove all files in this extraction. This cannot be undone.`)) {
+        return;
+    }
 
     try {
-        console.log('[deleteExtractedASAR] Sending DELETE request to /api/delete-extract with path:', path);
         const response = await fetch('/api/delete-extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path })
         });
 
-        console.log('[deleteExtractedASAR] Response status:', response.status);
         const data = await response.json();
-        console.log('[deleteExtractedASAR] Response data:', data);
 
         if (!response.ok) {
-            console.error('[deleteExtractedASAR] Error response:', data);
-            throw new Error(data.error || `Failed to delete extraction (HTTP ${response.status})`);
+            throw new Error(data.error || 'Failed to delete extraction');
         }
 
-        console.log('[deleteExtractedASAR] Success, reloading both lists');
-        showStatus('init-status', '✓ Decompiled ASAR deleted successfully', 'success');
-        await reloadBothLists();
+        showStatus('init-status', '✓ Extracted ASAR deleted successfully', 'success');
+        await loadExtractedASARList();
     } catch (error) {
-        console.error('[deleteExtractedASAR] Error:', error);
-        // Show a prominent alert for the active extraction error
-        if (error.message.includes('currently active')) {
-            alert('Cannot delete this extraction because it is currently active.\n\nPlease select a different extraction first, then try again.');
-        } else {
-            showStatus('init-status', error.message, 'error');
-        }
+        showStatus('init-status', error.message, 'error');
     }
 }
 
@@ -1865,20 +1840,6 @@ function addMediaReplacement() {
 }
 
 /**
- * Initialize media preview panel with empty state
- */
-function initMediaPreviewPanel() {
-    const container = document.getElementById('mediaPreviewContainer');
-    if (!container) return;
-
-    container.innerHTML = '';
-    const empty = document.createElement('div');
-    empty.className = 'media-side-preview-container empty';
-    empty.textContent = 'Select a media file from the grid to preview and manage replacements';
-    container.appendChild(empty);
-}
-
-/**
  * Load default media assets from public/assets/
  */
 function loadDefaultMediaAssets() {
@@ -1902,7 +1863,6 @@ function loadDefaultMediaAssets() {
 
     lastMediaAssets = defaultAssets;
     renderMediaAssetPicker(defaultAssets);
-    initMediaPreviewPanel();
     showStatus('media-status', `✓ Loaded ${defaultAssets.length} default assets`, 'success');
 }
 
@@ -1943,7 +1903,6 @@ function renderMediaAssetPicker(assets) {
         const id = 'asset-' + Math.random().toString(36).slice(2);
         const item = document.createElement('div');
         item.className = 'media-grid-item';
-        item.style.cursor = 'pointer';
 
         // Preview container with hover overlay
         const previewContainer = document.createElement('div');
@@ -1969,7 +1928,18 @@ function renderMediaAssetPicker(assets) {
             preview.appendChild(text);
         }
 
+        // Hover overlay with select button
+        const overlay = document.createElement('div');
+        overlay.className = 'media-hover-overlay';
+
+        const selectBtn = document.createElement('button');
+        selectBtn.className = 'media-select-btn';
+        selectBtn.textContent = '📁 Select Replacement';
+        selectBtn.onclick = () => fileInput.click();
+
+        overlay.appendChild(selectBtn);
         previewContainer.appendChild(preview);
+        previewContainer.appendChild(overlay);
 
         // File name and path
         const info = document.createElement('div');
@@ -2006,11 +1976,6 @@ function renderMediaAssetPicker(assets) {
         status.className = 'media-replacement-status';
         status.textContent = 'Using default';
 
-        // Click on grid item to show preview in side panel
-        item.onclick = () => {
-            displayMediaPreview(asset, fileInput, status);
-        };
-
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -2036,8 +2001,8 @@ function renderMediaAssetPicker(assets) {
             status.style.color = '#54adf7';
             item.classList.add('has-replacement');
 
-            // Update side preview
-            displayMediaPreview(asset, fileInput, status);
+            // Update live preview
+            updateLivePreviewMedia(asset.path, file);
         });
 
         item.appendChild(previewContainer);
@@ -2058,87 +2023,6 @@ function updateLivePreviewMedia(targetPath, file) {
     updatePreviewMedia({
         [targetPath]: fileUrl
     });
-}
-
-/**
- * Display media preview in side panel
- */
-function displayMediaPreview(asset, fileInput, statusDiv) {
-    const container = document.getElementById('mediaPreviewContainer');
-    if (!container) return;
-
-    container.innerHTML = '';
-
-    // Create content wrapper
-    const content = document.createElement('div');
-    content.className = 'media-side-preview-content';
-
-    // Preview element
-    let preview;
-    if (asset.type === 'image') {
-        preview = document.createElement('img');
-        preview.className = 'media-side-preview-image';
-        preview.src = asset.url;
-        preview.alt = asset.name;
-    } else if (asset.type === 'video') {
-        preview = document.createElement('video');
-        preview.className = 'media-side-preview-video';
-        preview.src = asset.url;
-        preview.muted = true;
-        preview.loop = true;
-        preview.controls = true;
-    }
-
-    if (preview) {
-        content.appendChild(preview);
-    }
-
-    // Asset name
-    const name = document.createElement('div');
-    name.className = 'media-side-preview-name';
-    name.textContent = asset.name || asset.path.split('/').pop();
-    content.appendChild(name);
-
-    // Asset path
-    const path = document.createElement('div');
-    path.className = 'media-side-preview-path';
-    path.textContent = asset.path;
-    content.appendChild(path);
-
-    // Button group
-    const buttonGroup = document.createElement('div');
-    buttonGroup.className = 'media-side-button-group';
-
-    // Select replacement button
-    const selectBtn = document.createElement('button');
-    selectBtn.className = 'media-side-select-btn';
-    selectBtn.textContent = '📁 Select Replacement';
-    selectBtn.onclick = () => fileInput.click();
-
-    // Restore button
-    const restoreBtn = document.createElement('button');
-    restoreBtn.className = 'media-side-restore-btn';
-    restoreBtn.textContent = '↻ Restore Default';
-    restoreBtn.onclick = () => {
-        fileInput.value = '';
-        statusDiv.textContent = 'Using default';
-        statusDiv.style.color = '#80b0d0';
-        
-        // Update grid item styling
-        const gridItem = fileInput.closest('.media-grid-item');
-        if (gridItem) {
-            gridItem.classList.remove('has-replacement');
-        }
-
-        // Reset side preview
-        displayMediaPreview(asset, fileInput, statusDiv);
-    };
-
-    buttonGroup.appendChild(selectBtn);
-    buttonGroup.appendChild(restoreBtn);
-    content.appendChild(buttonGroup);
-
-    container.appendChild(content);
 }
 
 /**
@@ -2704,7 +2588,42 @@ async function exportTheme() {
  * Import theme from file
  */
 function importTheme() {
-    document.getElementById('themeImportInput').click();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.theme.json,.json';
+    input.style.display = 'none';
+    input.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const theme = JSON.parse(text);
+
+            if (!theme.colors) {
+                throw new Error('Invalid theme file: missing colors');
+            }
+
+            // Apply theme colors
+            state.colors = theme.colors;
+            
+            // Apply theme media if available
+            if (theme.media) {
+                state.media = theme.media;
+            }
+            
+            state.config.name = theme.name || 'Imported Theme';
+            
+            renderColorMappings();
+            showStatus('finalize-status', `✓ Theme imported: ${theme.name || 'Imported Theme'}`, 'success');
+
+        } catch (error) {
+            showStatus('finalize-status', `Import failed: ${error.message}`, 'error');
+        }
+    };
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
 }
 
 /**
@@ -2787,12 +2706,42 @@ function exportCurrentPreset() {
 /**
  * Save current preset to server
  */
+async function saveCurrentPreset() {
+    if (Object.keys(state.colors).length === 0) {
+        showStatus('colors-status', 'No colors to save. Please add color mappings first.', 'error');
+        return;
+    }
 
-/**
- * Import theme from Finalize page
- */
-function importTheme() {
-    document.getElementById('themeImportInput').click();
+    const themeName = prompt('Enter a name for this preset:', state.config.name || 'My Custom Theme');
+    if (!themeName) return;
+
+    try {
+        const theme = {
+            name: themeName,
+            description: 'Custom preset',
+            colors: state.colors,
+            media: state.media || {},
+            music: state.music || []
+        };
+
+        const response = await fetch('/api/save-preset', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(theme)
+        });
+
+        const data = await response.json();
+        
+        if (data.success) {
+            state.config.name = themeName;
+            showStatus('colors-status', `✓ Preset "${themeName}" saved successfully`, 'success');
+        } else {
+            showStatus('colors-status', `Failed to save preset: ${data.error || 'Unknown error'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error saving preset:', error);
+        showStatus('colors-status', `Error saving preset: ${error.message}`, 'error');
+    }
 }
 
 /**
@@ -2849,11 +2798,11 @@ async function loadSavedThemes() {
             list.innerHTML = data.themes.map(theme => `
                 <div class="theme-item">
                     <div class="theme-info">
-                        <h4>${escapeHtml(theme.name)}</h4>
+                        <h4>${theme.name}</h4>
                         <p>${theme.colorCount} colors, ${theme.mediaCount} media files</p>
                         <small>${new Date(theme.created).toLocaleString()}</small>
                     </div>
-                    <button class="btn btn-primary" onclick="loadTheme('${escapeHtml(theme.filename)}')">Load</button>
+                    <button class="btn btn-primary" onclick="loadTheme('${theme.filename}')">Load</button>
                 </div>
             `).join('');
         }
@@ -2929,8 +2878,8 @@ async function viewBackups() {
         } else {
             list.innerHTML = data.backups.map(backup => `
                 <div class="backup-item">
-                    <span>${escapeHtml(backup.name)} (${new Date(backup.timestamp).toLocaleString()})</span>
-                    <button onclick="restoreBackup('${escapeHtml(backup.path)}')">Restore</button>
+                    <span>${backup.name} (${new Date(backup.timestamp).toLocaleString()})</span>
+                    <button onclick="restoreBackup('${backup.path}')">Restore</button>
                 </div>
             `).join('');
         }
@@ -2944,38 +2893,8 @@ async function viewBackups() {
 }
 
 /**
- * Restore from backup
- */
-/**
  * Show status message
  */
-/**
- * Reload both lists together
- */
-async function reloadBothLists() {
-    console.log('[reloadBothLists] Reloading extraction and backup lists');
-    await Promise.all([
-        loadExtractedASARList(),
-        loadBackupsList()
-    ]);
-}
-
-/**
- * Start auto-polling for list updates
- */
-function startAutoPolling() {
-    console.log('[startAutoPolling] Starting automatic list polling every 2 seconds');
-    
-    // Poll every 2 seconds for updates
-    setInterval(async () => {
-        try {
-            await reloadBothLists();
-        } catch (error) {
-            console.error('[autoPolling] Error polling lists:', error);
-        }
-    }, 2000);
-}
-
 function showStatus(elementId, message, type) {
     const element = document.getElementById(elementId);
     element.textContent = message;
@@ -2997,216 +2916,5 @@ window.addEventListener('load', async () => {
     // Load extracted ASAR list
     await loadExtractedASARList();
 
-    detectLauncher({ autoInit: true, silentFailure: false });
-    
-    // Start auto-polling for list updates every 2 seconds
-    startAutoPolling();
+    detectLauncher({ autoInit: false, silentFailure: true });
 });
-
-// ==================== Step 5: Finalize Functions ====================
-
-/**
- * Save the current preset with a custom name
- */
-async function saveCurrentPreset() {
-    try {
-        const statusDiv = document.getElementById('save-export-status');
-        const nameInput = document.getElementById('presetNameInput');
-        
-        if (!nameInput.value.trim()) {
-            showStatus(statusDiv, 'Please enter a preset name', 'error');
-            return;
-        }
-        
-        showStatus(statusDiv, 'Saving preset...', 'loading');
-        
-        const response = await fetch('/api/save-preset', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: escapeHtml(nameInput.value.trim()),
-                colors: state.colors,
-                media: state.media,
-                music: state.music
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus(statusDiv, `✓ Preset "${escapeHtml(nameInput.value)}" saved successfully`, 'success');
-            nameInput.value = '';
-        } else {
-            showStatus(statusDiv, `✗ Error: ${result.error || 'Failed to save preset'}`, 'error');
-        }
-    } catch (error) {
-        console.error('Save preset error:', error);
-        showStatus(document.getElementById('save-export-status'), `✗ Error: ${error.message}`, 'error');
-    }
-}
-
-/**
- * Export the current preset as JSON file
- */
-async function exportCurrentPreset() {
-    try {
-        const statusDiv = document.getElementById('save-export-status');
-        
-        // Prompt for filename
-        const filename = prompt(
-            'Enter filename for export:',
-            `preset-${state.config.name || 'custom'}-${Date.now()}.json`
-        );
-        
-        if (filename === null) {
-            // User cancelled
-            return;
-        }
-        
-        if (!filename.trim()) {
-            showStatus(statusDiv, 'Please enter a valid filename', 'error');
-            return;
-        }
-        
-        showStatus(statusDiv, 'Exporting preset...', 'loading');
-        
-        const preset = {
-            name: state.config.name,
-            colors: state.colors,
-            media: state.media,
-            music: state.music,
-            exportDate: new Date().toISOString()
-        };
-        
-        const dataStr = JSON.stringify(preset, null, 2);
-        const dataBlob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(dataBlob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename.endsWith('.json') ? filename : `${filename}.json`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-        
-        showStatus(statusDiv, `✓ Preset exported as ${escapeHtml(link.download)}`, 'success');
-    } catch (error) {
-        console.error('Export preset error:', error);
-        showStatus(document.getElementById('save-export-status'), `✗ Error: ${error.message}`, 'error');
-    }
-}
-
-/**
- * Test the preset by launching the modified launcher
- */
-async function testPreset() {
-    try {
-        const statusDiv = document.getElementById('test-preset-status');
-        
-        if (!state.extractedPath) {
-            showStatus(statusDiv, '✗ No decompiled ASAR selected. Please go to Step 1 and select a decompilation.', 'error');
-            return;
-        }
-        
-        showStatus(statusDiv, 'Launching test launcher...', 'loading');
-        
-        const response = await fetch('/api/test-launcher', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                extractedPath: state.extractedPath
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus(statusDiv, '✓ Launcher started. Check your screen!', 'success');
-        } else {
-            showStatus(statusDiv, `✗ Error: ${result.error || 'Failed to launch'}`, 'error');
-        }
-    } catch (error) {
-        console.error('Test launcher error:', error);
-        showStatus(document.getElementById('test-preset-status'), `✗ Error: ${error.message}`, 'error');
-    }
-}
-
-/**
- * Compile the modified app.asar without installing
- */
-async function compileAsar() {
-    try {
-        const statusDiv = document.getElementById('compile-status');
-        
-        if (!state.extractedPath) {
-            showStatus(statusDiv, '✗ No decompiled ASAR selected', 'error');
-            return;
-        }
-        
-        showStatus(statusDiv, 'Compiling modified app.asar...', 'loading');
-        
-        const response = await fetch('/api/compile-asar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                extractedPath: state.extractedPath
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus(statusDiv, '✓ Compilation successful. Modified ASAR created.', 'success');
-        } else {
-            showStatus(statusDiv, `✗ Error: ${result.error || 'Compilation failed'}`, 'error');
-        }
-    } catch (error) {
-        console.error('Compile ASAR error:', error);
-        showStatus(document.getElementById('compile-status'), `✗ Error: ${error.message}`, 'error');
-    }
-}
-
-/**
- * Compile and install the modified app.asar
- */
-async function installAsar() {
-    try {
-        const statusDiv = document.getElementById('compile-status');
-        
-        if (!state.extractedPath) {
-            showStatus(statusDiv, '✗ No decompiled ASAR selected', 'error');
-            return;
-        }
-        
-        const confirmed = confirm(
-            'This will:\n' +
-            '1. Create a backup of the original app.asar\n' +
-            '2. Compile the modified app.asar\n' +
-            '3. Install it to the launcher\n\n' +
-            'Continue?'
-        );
-        
-        if (!confirmed) return;
-        
-        showStatus(statusDiv, 'Compiling and installing...', 'loading');
-        
-        const response = await fetch('/api/install-asar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                extractedPath: state.extractedPath
-            })
-        });
-        
-        const result = await response.json();
-        
-        if (result.success) {
-            showStatus(statusDiv, '✓ Installation successful! Restart the launcher to see changes.', 'success');
-        } else {
-            showStatus(statusDiv, `✗ Error: ${result.error || 'Installation failed'}`, 'error');
-        }
-    } catch (error) {
-        console.error('Install ASAR error:', error);
-        showStatus(document.getElementById('compile-status'), `✗ Error: ${error.message}`, 'error');
-    }
-}
