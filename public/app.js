@@ -14,7 +14,8 @@ const state = {
         media: {},
         music: []
     },
-    currentPage: 1
+    currentPage: 1,
+    selectedExtractPath: null // Track selected extract for "Use Selected" button
 };
 
 // Persisted preview state for syncing across steps/iframes
@@ -432,31 +433,42 @@ async function loadPresetFiles() {
 }
 
 /**
+ * Handle file selection from HTML5 file input
+ */
+function handleAsarFileSelection(event) {
+    const file = event.target.files[0];
+    if (file) {
+        // For browser environment, we display the file name
+        // In production with file API backend, this would handle the actual file
+        DOM.asarPath.value = file.name;
+        
+        // Show success indicator
+        const pathIndicator = document.getElementById('path-success-indicator');
+        if (pathIndicator) pathIndicator.style.display = 'block';
+        
+        // Clear any previous status messages
+        const statusEl = document.getElementById('init-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.style.display = 'none';
+        }
+        
+        // Auto-initialize after path is set
+        setTimeout(() => initSession(), 100);
+    }
+}
+
+/**
  * Open file picker dialog for user to select app.asar file
  */
-async function browseForAsar() {
-    try {
-        const response = await fetch('/api/browse-for-asar', {
-            method: 'POST'
-        });
-        const data = await response.json();
-
-        if (data.success && data.path) {
-            DOM.asarPath.value = data.path;
-            
-            // Show success indicator
-            const pathIndicator = document.getElementById('path-success-indicator');
-            if (pathIndicator) pathIndicator.style.display = 'block';
-            
-            // Clear any previous status messages
-            const statusEl = document.getElementById('init-status');
-            if (statusEl) {
-                statusEl.textContent = '';
-                statusEl.style.display = 'none';
-            }
-        }
-    } catch (error) {
-        console.error('Error browsing for asar:', error);
+function browseForAsar() {
+    console.log('[browseForAsar] Opening file picker');
+    const fileInput = document.getElementById('asarFileInput');
+    if (fileInput) {
+        fileInput.click();
+    } else {
+        // Fallback if file input doesn't exist
+        showStatus('init-status', 'File picker not available. Enter path manually or use Auto-Detect.', 'warning');
     }
 }
 
@@ -467,6 +479,11 @@ async function detectLauncher(options = {}) {
     const { autoInit = false, silentFailure = false } = options;
 
     try {
+        console.log('[detectLauncher] Starting auto-detect...');
+        
+        // Show loading feedback
+        showStatus('init-status', 'Auto-detecting RSI Launcher...', 'info');
+        
         console.log('[detectLauncher] Fetching /api/detect-launcher');
         const response = await fetch('/api/detect-launcher');
         const data = await response.json();
@@ -477,28 +494,40 @@ async function detectLauncher(options = {}) {
             throw new Error(data.error || data.message || 'Launcher not found');
         }
 
+        if (!data.launcher || !data.launcher.asarPath) {
+            throw new Error('Launcher detected but asar path is missing');
+        }
+
         console.log('[detectLauncher] Setting path to:', data.launcher.asarPath);
+        
+        // Ensure DOM is initialized
+        if (!DOM.asarPath) {
+            DOM.init();
+        }
+        
         DOM.asarPath.value = data.launcher.asarPath;
         
         // Show success indicator next to path field
         const pathIndicator = document.getElementById('path-success-indicator');
-        if (pathIndicator) pathIndicator.style.display = 'block';
+        if (pathIndicator) {
+            pathIndicator.style.display = 'block';
+        }
         
-        // Clear any previous status messages - hide the status element completely
+        // Clear status message - the green checkmark is sufficient feedback
         const statusEl = document.getElementById('init-status');
         if (statusEl) {
             statusEl.textContent = '';
             statusEl.style.display = 'none';
         }
 
-        if (autoInit) {
-            await initSession();
-        }
+        // Auto-initialize after path is detected
+        console.log('[detectLauncher] Auto-initializing session');
+        await initSession();
 
     } catch (error) {
         console.error('[detectLauncher] Error:', error.message);
         if (!silentFailure) {
-            showStatus('init-status', error.message, 'error');
+            showStatus('init-status', '✗ Error: ' + error.message, 'error');
         }
     }
 }
@@ -564,7 +593,12 @@ async function initSession() {
             initBtn.innerHTML = '✓';
         }
         
-        showStatus('init-status', '✓ Initialized successfully. Click "Next" to continue.', 'success');
+        // Clear status message - the green checkmark is sufficient feedback
+        const statusEl = document.getElementById('init-status');
+        if (statusEl) {
+            statusEl.textContent = '';
+            statusEl.style.display = 'none';
+        }
         
         // Load extracted list but don't auto-navigate
         loadExtractedList();
@@ -806,6 +840,40 @@ async function useSelectedExtract() {
 }
 
 /**
+ * Select an extract item and highlight it
+ */
+function selectExtract(path, element) {
+    // Remove previous selection
+    const extractsList = document.getElementById('extractsList');
+    if (extractsList) {
+        const previousSelected = extractsList.querySelector('.extract-item.selected');
+        if (previousSelected) {
+            previousSelected.classList.remove('selected');
+            previousSelected.style.borderColor = '';
+            previousSelected.style.background = '';
+        }
+    }
+    
+    // Add selection to current item
+    state.selectedExtractPath = path;
+    element.classList.add('selected');
+    element.style.borderColor = 'rgba(0, 212, 255, 0.5)';
+    element.style.background = 'rgba(0, 212, 255, 0.1)';
+}
+
+/**
+ * Use the selected extract from the list
+ */
+async function useSelectedExtract() {
+    if (!state.selectedExtractPath) {
+        showStatus('extract-status', 'Please select an extraction first', 'error');
+        return;
+    }
+
+    await useExtractedASAR(state.selectedExtractPath);
+}
+
+/**
  * Load and display backups list
  */
 async function loadBackupsList() {
@@ -984,6 +1052,11 @@ async function loadExtractedASARList() {
         extracts.forEach((extract) => {
             const extractDiv = document.createElement('div');
             extractDiv.className = 'extract-item';
+            extractDiv.id = 'extract-' + extract.path.replace(/[\\/:]/g, '_');
+            
+            // Make the entire item clickable to select it
+            extractDiv.style.cursor = 'pointer';
+            extractDiv.onclick = () => selectExtract(extract.path, extractDiv);
             
             const infoDiv = document.createElement('div');
             infoDiv.className = 'extract-item-info';
@@ -1006,13 +1079,19 @@ async function loadExtractedASARList() {
             useBtn.className = 'btn btn-secondary';
             useBtn.textContent = '↻ Use';
             useBtn.title = 'Load this extraction';
-            useBtn.onclick = () => useExtractedASAR(extract.path);
+            useBtn.onclick = (e) => {
+                e.stopPropagation();
+                useExtractedASAR(extract.path);
+            };
             
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn btn-secondary';
             deleteBtn.textContent = '✕ Delete';
             deleteBtn.title = 'Delete this extraction';
-            deleteBtn.onclick = () => deleteExtractedASAR(extract.path, extract.name);
+            deleteBtn.onclick = (e) => {
+                e.stopPropagation();
+                deleteExtractedASAR(extract.path, extract.name);
+            };
             
             actionsDiv.appendChild(useBtn);
             actionsDiv.appendChild(deleteBtn);
@@ -2509,7 +2588,42 @@ async function exportTheme() {
  * Import theme from file
  */
 function importTheme() {
-    document.getElementById('themeImportInput').click();
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.theme.json,.json';
+    input.style.display = 'none';
+    input.onchange = async (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        try {
+            const text = await file.text();
+            const theme = JSON.parse(text);
+
+            if (!theme.colors) {
+                throw new Error('Invalid theme file: missing colors');
+            }
+
+            // Apply theme colors
+            state.colors = theme.colors;
+            
+            // Apply theme media if available
+            if (theme.media) {
+                state.media = theme.media;
+            }
+            
+            state.config.name = theme.name || 'Imported Theme';
+            
+            renderColorMappings();
+            showStatus('finalize-status', `✓ Theme imported: ${theme.name || 'Imported Theme'}`, 'success');
+
+        } catch (error) {
+            showStatus('finalize-status', `Import failed: ${error.message}`, 'error');
+        }
+    };
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
 }
 
 /**
@@ -2628,13 +2742,6 @@ async function saveCurrentPreset() {
         console.error('Error saving preset:', error);
         showStatus('colors-status', `Error saving preset: ${error.message}`, 'error');
     }
-}
-
-/**
- * Import theme from Finalize page
- */
-function importTheme() {
-    document.getElementById('themeImportInput').click();
 }
 
 /**
@@ -2779,37 +2886,6 @@ async function viewBackups() {
 
         section.style.display = 'block';
         showStatus('finalize-status', '', 'info');
-
-    } catch (error) {
-        showStatus('finalize-status', error.message, 'error');
-    }
-}
-
-/**
- * Restore from backup
- */
-async function restoreBackup(backupPath) {
-    if (!confirm('Are you sure you want to restore from this backup?')) {
-        return;
-    }
-
-    showStatus('finalize-status', 'Restoring from backup...', 'info');
-
-    try {
-        const response = await fetch('/api/restore', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ backupPath })
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to restore');
-        }
-
-        showStatus('finalize-status', '✓ Restored successfully', 'success');
-        setTimeout(viewBackups, 1000);
 
     } catch (error) {
         showStatus('finalize-status', error.message, 'error');

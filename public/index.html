@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>RUIE</title>
     <link rel="icon" type="image/x-icon" href="/icon.ico">
-    <link rel="stylesheet" href="styles.css?v=2">
+    <link rel="stylesheet" href="styles.css?v=20260201d">
+    <script src="app.js?v=20260201" defer></script>
 </head>
 <body>
     <div class="container">
@@ -26,11 +27,10 @@
                 <div class="setup-panel" style="margin-bottom: 20px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0;">App.asar Detection & Selection</h3>
-                        <label for="asarPath" style="color: #a0b0c0; font-size: 0.9em;">Path to app.asar:</label>
                     </div>
                     <div class="form-group" style="display: flex; align-items: center; gap: 15px; width: 100%;">
                         <div style="display: flex; align-items: center; gap: 10px; width: 50%;">
-                            <input type="text" id="asarPath" placeholder="C:\path\to\app.asar" style="flex: 1; cursor: pointer;" readonly>
+                            <input type="text" id="asarPath" placeholder="Path to app.asar" style="flex: 1; cursor: pointer;" readonly>
                             <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar" onclick="browseForAsar()">✓</span>
                         </div>
                         <div style="display: flex; gap: 10px; flex: 1; justify-content: flex-end;">
@@ -42,6 +42,9 @@
                     <div id="init-status" class="status"></div>
                 </div>
 
+                <!-- Hidden file input for manual asar selection -->
+                <input type="file" id="asarFileInput" style="display: none;" accept=".asar" onchange="handleAsarFileSelection(event)">
+
                 <!-- Two Columns: ASAR Manager + Backup Manager -->
                 <div class="setup-layout">
                     <!-- Left Column: ASAR Manager -->
@@ -52,12 +55,6 @@
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Extract app.asar</button>
                             <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
-                        </div>
-                        
-                        <div class="existing-extract" style="display: flex; flex-direction: column; margin-top: 15px;">
-                            <label for="extractSelect" style="margin-bottom: 8px;">Use existing extract:</label>
-                            <select id="extractSelect" class="media-filter"></select>
-                            <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.85em; padding: 8px 12px;" onclick="useSelectedExtract()">Use Selected</button>
                         </div>
 
                         <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
@@ -72,6 +69,7 @@
                                 Loading extractions...
                             </div>
                         </div>
+                        <button class="btn btn-secondary" style="margin-top: 8px; font-size: 0.85em; padding: 8px 12px; width: calc(50% - 5px); display: block; margin-left: auto; margin-right: auto;" onclick="useSelectedExtract()">Use Selected</button>
                     </div>
 
                     <!-- Right Column: Backup Manager -->
@@ -79,7 +77,7 @@
                         <h3>Backup Manager</h3>
                         <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Manage your backups. Create snapshots before making changes.</p>
                         
-                        <div class="backup-actions" style="margin-bottom: 15px; text-align: center;">
+                        <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center;">
                             <button class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
                         </div>
 
@@ -322,6 +320,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js?v=20260201g"></script>
 </body>
 </html>
