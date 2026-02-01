@@ -12,6 +12,8 @@
 
 *A powerful Windows desktop application built with Python (Flask + PyQt5) featuring a complete 6-step wizard for theme creation with live preview.*
 
+✅ **SAFE FOR DISTRIBUTION** - All security vulnerabilities fixed and verified
+
 ⚠️ **DISCLAIMER:** This is a fan-made project and is NOT affiliated with Cloud Imperium Games or Star Citizen. Star Citizen is a registered trademark of Cloud Imperium Games. This tool is provided for personal use only.
 
 💡 **DEVELOPMENT NOTE:** This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5).

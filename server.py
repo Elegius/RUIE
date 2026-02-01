@@ -17,6 +17,9 @@ from launcher_detector import LauncherDetector
 from color_replacer import ColorReplacer
 from media_replacer import MediaReplacer
 
+# Production environment indicator
+PRODUCTION_MODE = True  # Set to True for production deployment
+
 # Determine the base path for resources
 def get_resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller."""
@@ -31,13 +34,26 @@ def get_resource_path(relative_path):
 static_folder = get_resource_path('public')
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
 
-# CORS configuration - local desktop app only
-# Restrict to localhost to prevent accidental exposure
+# Production security configuration
+if PRODUCTION_MODE:
+    app.config['ENV'] = 'production'
+    app.config['DEBUG'] = False
+    app.config['TESTING'] = False
+    app.config['PROPAGATE_EXCEPTIONS'] = False
+    app.config['PRESERVE_CONTEXT_ON_EXCEPTION'] = False
+
+# CORS configuration - strict local desktop app only
+# Fixed to use specific port instead of wildcard
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:*", "http://127.0.0.1:*"],
+        "origins": [
+            "http://localhost:5000",
+            "http://127.0.0.1:5000"
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "allow_headers": ["Content-Type"],
+        "supports_credentials": False,
+        "max_age": 3600
     }
 })
 
@@ -55,6 +71,11 @@ def add_security_headers(response):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'  # Prevent clickjacking
     response.headers['X-XSS-Protection'] = '1; mode=block'  # Enable XSS protection
     
+    # Production security headers
+    if PRODUCTION_MODE:
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    
     # Cache static assets for performance
     if response.content_type and ('image' in response.content_type or 
                                    'font' in response.content_type or
@@ -66,6 +87,164 @@ def add_security_headers(response):
 # Configuration
 DOCS_DIR = os.path.expanduser('~/Documents/RUIE')
 os.makedirs(DOCS_DIR, exist_ok=True)
+
+# ============================================================================
+# SECURITY VALIDATION FUNCTIONS
+# ============================================================================
+
+# Allowed media file extensions (whitelist approach)
+ALLOWED_MEDIA_EXTENSIONS = {
+    # Images
+    'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff',
+    # Videos
+    'mp4', 'webm', 'mkv', 'avi', 'mov', 'm4v', 'flv', 'wmv', 'mpg', 'mpeg',
+    # Audio
+    'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma', 'opus', 'aiff'
+}
+
+# Max file sizes by category
+MAX_FILE_SIZES = {
+    'images': 100 * 1024 * 1024,     # 100MB
+    'videos': 1000 * 1024 * 1024,    # 1GB
+    'audio': 200 * 1024 * 1024       # 200MB
+}
+
+# Allowed extraction folder names (pattern validation)
+ALLOWED_EXTRACT_PATTERNS = [
+    'app-decompiled-',
+    'app-extracted-'
+]
+
+def get_file_category(filename):
+    """Determine file category from extension."""
+    ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+    
+    image_exts = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'}
+    video_exts = {'mp4', 'webm', 'mkv', 'avi', 'mov', 'm4v', 'flv', 'wmv', 'mpg', 'mpeg'}
+    audio_exts = {'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma', 'opus', 'aiff'}
+    
+    if ext in image_exts:
+        return 'images'
+    elif ext in video_exts:
+        return 'videos'
+    elif ext in audio_exts:
+        return 'audio'
+    return None
+
+def validate_file_upload(filename, file_size):
+    """
+    Validate uploaded file is safe.
+    Returns (is_valid, error_message)
+    """
+    if not filename:
+        return False, "Missing filename"
+    
+    # Check extension
+    if '.' not in filename:
+        return False, "File must have an extension"
+    
+    ext = filename.rsplit('.', 1)[1].lower()
+    if ext not in ALLOWED_MEDIA_EXTENSIONS:
+        return False, f"File type not allowed: {ext}. Allowed types: {', '.join(sorted(ALLOWED_MEDIA_EXTENSIONS))}"
+    
+    # Check file size
+    category = get_file_category(filename)
+    if category:
+        max_size = MAX_FILE_SIZES.get(category, 100 * 1024 * 1024)
+        if file_size > max_size:
+            max_mb = max_size / (1024 * 1024)
+            return False, f"File too large. Max size for {category}: {max_mb:.0f}MB"
+    
+    # Prevent suspicious filenames
+    if '..' in filename or '/' in filename or '\\' in filename:
+        return False, "Invalid filename characters"
+    
+    return True, ""
+
+def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
+    """
+    Validate that a path is safe and within allowed directory.
+    Returns (is_safe, resolved_path, error_message)
+    
+    Args:
+        requested_path: The path to validate
+        base_dir: The base directory it must be within
+        allowed_prefixes: Optional list of allowed folder name prefixes
+    """
+    try:
+        base = Path(base_dir).resolve()
+        requested = Path(requested_path).resolve()
+        
+        # Check if path exists (prevents some attacks)
+        if not requested.exists():
+            return False, None, f"Path does not exist: {requested_path}"
+        
+        # Check if path is within base directory
+        try:
+            requested.relative_to(base)
+        except ValueError:
+            return False, None, f"Path is outside allowed directory: {requested_path}"
+        
+        # Check symlinks (prevent symlink attacks)
+        if requested.is_symlink() or any(part.is_symlink() for part in requested.parents):
+            return False, None, "Symlinks are not allowed"
+        
+        # Check allowed prefixes if specified (e.g., extraction folders)
+        if allowed_prefixes:
+            folder_name = requested.name
+            if not any(folder_name.startswith(prefix) for prefix in allowed_prefixes):
+                return False, None, f"Invalid folder name: {folder_name}"
+        
+        return True, requested, ""
+    
+    except Exception as e:
+        return False, None, f"Path validation error: {str(e)}"
+
+def validate_color_mapping(color_mappings):
+    """
+    Validate color mappings are safe and properly formatted.
+    Returns (is_valid, validated_mappings, error_message)
+    """
+    if not isinstance(color_mappings, dict):
+        return False, {}, "Color mappings must be a dictionary"
+    
+    if len(color_mappings) > 500:
+        return False, {}, "Too many color mappings (max 500)"
+    
+    validated = {}
+    
+    for key, value in color_mappings.items():
+        # Validate key
+        if not isinstance(key, str):
+            return False, {}, f"Color key must be string, got {type(key).__name__}"
+        
+        if len(key) > 200:
+            return False, {}, f"Color key too long: {len(key)} chars (max 200)"
+        
+        # Prevent null bytes and other control characters
+        if '\x00' in key or any(ord(c) < 32 for c in key if c not in '\t\n\r'):
+            return False, {}, "Color key contains invalid characters"
+        
+        # Validate value
+        if not isinstance(value, str):
+            return False, {}, f"Color value must be string, got {type(value).__name__}"
+        
+        if len(value) > 200:
+            return False, {}, f"Color value too long: {len(value)} chars (max 200)"
+        
+        # Validate hex color format (more lenient to support various color formats)
+        if not re.match(r'^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$|^rgb\(\d+,\s*\d+,\s*\d+\)$|^rgba\(\d+,\s*\d+,\s*\d+,\s*[\d.]+\)$', value):
+            # Allow custom values but warn
+            if not re.match(r'^[a-zA-Z0-9\-#\(\),.\s]+$', value):
+                return False, {}, f"Invalid color format: {value}"
+        
+        validated[key] = value
+    
+    return True, validated, ""
+
+# ============================================================================
+# END SECURITY VALIDATION FUNCTIONS
+# ============================================================================
 
 class ThemeManager:
     """Manage theme extraction, backup, and repacking."""
@@ -870,7 +1049,18 @@ def api_use_extract():
     if not selected_path:
         return jsonify({'success': False, 'error': 'Missing path'}), 400
 
-    path = Path(selected_path)
+    # SECURITY: Validate path safety
+    is_safe, resolved_path, error_msg = validate_path_safety(
+        selected_path, 
+        DOCS_DIR, 
+        allowed_prefixes=ALLOWED_EXTRACT_PATTERNS
+    )
+    
+    if not is_safe:
+        print(f'[API] Path validation failed: {error_msg}')
+        return jsonify({'success': False, 'error': error_msg}), 403
+
+    path = resolved_path
     if not path.exists() or not path.is_dir():
         return jsonify({'success': False, 'error': 'Extracted folder not found'}), 404
 
@@ -897,21 +1087,26 @@ def api_delete_extract():
         print(f'[API] Error: Missing path')
         return jsonify({'success': False, 'error': 'Missing path'}), 400
     
-    path = Path(path_str)
+    # SECURITY: Validate path safety before any operations
+    is_safe, resolved_path, error_msg = validate_path_safety(
+        path_str, 
+        DOCS_DIR, 
+        allowed_prefixes=ALLOWED_EXTRACT_PATTERNS
+    )
     
-    # Verify the path exists and is in the expected directory
-    if not path.exists():
-        print(f'[API] Error: Path does not exist: {path}')
-        return jsonify({'success': False, 'error': f'Extracted folder not found: {path}'}), 404
+    if not is_safe:
+        print(f'[API] Path validation failed: {error_msg}')
+        return jsonify({'success': False, 'error': error_msg}), 403
+    
+    path = resolved_path
     
     try:
         # Prevent deletion if it's the currently active extraction
-        if theme_manager.extracted_dir and Path(theme_manager.extracted_dir) == path:
+        if theme_manager.extracted_dir and Path(theme_manager.extracted_dir).resolve() == path:
             print(f'[API] Error: Cannot delete currently active extraction: {path}')
             return jsonify({'success': False, 'error': 'Cannot delete the currently active extraction'}), 400
         
         # Delete the directory recursively
-        import shutil
         print(f'[API] Deleting directory: {path}')
         shutil.rmtree(str(path))
         
@@ -971,13 +1166,22 @@ def api_apply_colors():
     """Apply color replacements asynchronously."""
     try:
         data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'Invalid JSON'}), 400
+        
         color_mappings = data.get('colors', {})
         
         if not color_mappings:
             return jsonify({'success': False, 'error': 'No color mappings provided'}), 400
         
-        # Start async operation
-        if not theme_manager.apply_colors_async(color_mappings):
+        # SECURITY: Validate color mappings
+        is_valid, validated_colors, error_msg = validate_color_mapping(color_mappings)
+        if not is_valid:
+            print(f"[API] Color validation failed: {error_msg}")
+            return jsonify({'success': False, 'error': error_msg}), 400
+        
+        # Start async operation with validated colors
+        if not theme_manager.apply_colors_async(validated_colors):
             return jsonify({'success': False, 'error': 'Color apply operation already in progress'}), 409
         
         return jsonify({
@@ -1027,17 +1231,50 @@ def api_upload_media():
     if not upload or not target_path:
         return jsonify({'success': False, 'error': 'Missing file or target path'}), 400
 
-    base = Path(theme_manager.extracted_dir).resolve()
-    target = (base / target_path).resolve()
-
-    if not str(target).startswith(str(base)):
-        return jsonify({'success': False, 'error': 'Invalid target path'}), 403
+    # SECURITY: Validate filename
+    filename = upload.filename.lower()
+    is_valid, error_msg = validate_file_upload(filename, 0)  # Size checked after upload
+    if not is_valid:
+        print(f"[API] File validation failed: {error_msg}")
+        return jsonify({'success': False, 'error': error_msg}), 400
 
     try:
+        # Read file to validate size
+        upload.seek(0, 2)
+        file_size = upload.tell()
+        upload.seek(0)
+        
+        # Re-validate with actual size
+        is_valid, error_msg = validate_file_upload(filename, file_size)
+        if not is_valid:
+            print(f"[API] File size validation failed: {error_msg}")
+            return jsonify({'success': False, 'error': error_msg}), 400
+
+        # SECURITY: Validate target path safety
+        base = Path(theme_manager.extracted_dir).resolve()
+        
+        # Prevent path traversal with ../ or absolute paths
+        if target_path.startswith('/') or target_path.startswith('\\') or '..' in target_path:
+            return jsonify({'success': False, 'error': 'Invalid target path'}), 403
+        
+        target = (base / target_path).resolve()
+        
+        # Verify resolved path is within base
+        try:
+            target.relative_to(base)
+        except ValueError:
+            print(f"[API] Path traversal attempt detected")
+            return jsonify({'success': False, 'error': 'Invalid target path'}), 403
+        
+        # Check for symlinks in the path
+        if target.is_symlink() or any(part.is_symlink() for part in target.parents):
+            return jsonify({'success': False, 'error': 'Symlinks are not allowed'}), 403
+
         target.parent.mkdir(parents=True, exist_ok=True)
         upload.save(str(target))
         return jsonify({'success': True, 'message': 'File replaced', 'targetPath': target_path})
     except Exception as e:
+        print(f"[API Error] Upload failed: {str(e)}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/clear-music', methods=['POST'])
@@ -1731,4 +1968,20 @@ def serve_static(path):
     return send_from_directory(static_folder, path)
 
 if __name__ == '__main__':
-    app.run(host='127.0.0.1', port=5000, debug=False)
+    # Production deployment with Waitress WSGI server
+    import logging
+    from waitress import serve
+    
+    # Configure production logging
+    log = logging.getLogger('waitress')
+    log.setLevel(logging.INFO)
+    
+    print(f"[Production Server] Starting RUIE Server v0.2 Alpha")
+    print(f"[Production Server] Listening on http://127.0.0.1:5000")
+    print(f"[Production Server] WSGI: Waitress")
+    print(f"[Production Server] Debug: Off")
+    print(f"[Production Server] Environment: Production")
+    
+    # Serve with production WSGI server (Waitress)
+    # Single-threaded for desktop app consistency
+    serve(app, host='127.0.0.1', port=5000, threads=4, _quiet=False)

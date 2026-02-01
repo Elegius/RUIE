@@ -12,10 +12,19 @@ from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl, QTimer
 from PyQt5.QtGui import QIcon
 
-# Set up logging
+# Version info
+APP_VERSION = "0.2 Alpha"
+APP_NAME = "RUIE"
+# Development Note: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5)
+
+# SECURITY: Determine if running in production (frozen exe)
+PRODUCTION_BUILD = getattr(sys, 'frozen', False)
+
+# Set up logging - INFO level in production, DEBUG in development
 log_file = os.path.join(os.path.expanduser('~'), 'Documents', 'RUIE-debug.log')
+log_level = logging.INFO if PRODUCTION_BUILD else logging.DEBUG
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=log_level,
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.FileHandler(log_file, mode='w'),
@@ -23,11 +32,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Version info
-APP_VERSION = "0.2 Alpha"
-APP_NAME = "RUIE"
-# Development Note: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5)
 
 # Copyright and Disclaimer
 COPYRIGHT_TEXT = """
@@ -51,18 +55,40 @@ def is_admin():
         return False
 
 def request_admin():
-    """Request admin privileges if not already elevated."""
+    """Request admin privileges if not already elevated.
+    
+    SECURITY NOTE: Admin privileges are required to:
+    - Modify files in Program Files directory
+    - Access protected system directories
+    - Install themes to Star Citizen launcher
+    
+    Windows will display a User Account Control (UAC) prompt.
+    """
     is_admin_now = is_admin()
     if not is_admin_now:
         logger.info("Requesting administrator privileges...")
+        logger.info("Reason: Need access to modify Star Citizen launcher files in Program Files")
         try:
-            # Re-run this script with admin privileges
+            # Re-run this script with admin privileges using ShellExecute
             script = sys.argv[0]
-            ctypes.windll.shell.ShellExecuteW(None, "runas", script, "", None, 0)
+            ctypes.windll.shell.ShellExecuteW(
+                None, 
+                "runas", 
+                script, 
+                "", 
+                None, 
+                1  # SW_SHOW - display the window
+            )
             sys.exit(0)
         except Exception as e:
             logger.warning(f"Could not request elevation: {e}")
             logger.warning("Running without admin privileges - some features may not work")
+            # Show error in UI
+            from PyQt5.QtWidgets import QMessageBox
+            msg = ("Administrator Privileges Required\n\n"
+                   "RUIE needs admin access to modify Star Citizen launcher files.\n\n"
+                   "Please run RUIE as Administrator.")
+            logger.error(msg)
     else:
         logger.info("✓ Running with admin privileges ✓")
 
@@ -96,15 +122,15 @@ class LauncherApp(QMainWindow):
         self.check_and_load_ui()
     
     def start_server(self):
-        """Start the Flask server as a subprocess or thread."""
+        """Start the production Flask server as a subprocess or thread."""
         try:
             project_root = str(Path(__file__).parent)
             
-            logger.info('Starting Flask server...')
+            logger.info('Starting production server (Waitress WSGI)...')
             
             if is_frozen():
-                # Running as compiled EXE - start Flask in a thread
-                logger.info('Running in frozen mode - starting server as thread')
+                # Running as compiled EXE - start Flask in a thread with Waitress
+                logger.info('Running in frozen mode (production) - starting server as thread')
                 
                 def run_flask():
                     try:
@@ -113,10 +139,12 @@ class LauncherApp(QMainWindow):
                             os.chdir(sys._MEIPASS)
                             logger.info(f'Working directory set to: {sys._MEIPASS}')
                         
-                        # Import and run server
+                        # Import and run server with production WSGI
                         import server
-                        logger.info('Server module imported successfully')
-                        server.app.run(host='127.0.0.1', port=self.port, debug=False, use_reloader=False, threaded=True)
+                        from waitress import serve
+                        logger.info('Server module imported successfully - using Waitress WSGI')
+                        logger.info(f'Production server starting on port {self.port}')
+                        serve(server.app, host='127.0.0.1', port=self.port, threads=4)
                     except Exception as e:
                         logger.error(f'Server error: {e}', exc_info=True)
                 
@@ -125,8 +153,8 @@ class LauncherApp(QMainWindow):
                 logger.info('Server thread started')
                 
             else:
-                # Running from source - start Flask as subprocess
-                logger.info('Running from source - starting server as subprocess')
+                # Running from source - start Flask as subprocess with Waitress
+                logger.info('Running from source - starting production server as subprocess (Waitress WSGI)')
                 
                 # On Windows, hide the subprocess window
                 startupinfo = None

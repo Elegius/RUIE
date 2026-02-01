@@ -204,6 +204,116 @@ Error: Inno Setup 6 is not installed
 
 ---
 
+### Issue 6.5: Inno Setup Compilation Failed
+
+**Error Message:**
+```
+Error: Inno Setup compilation failed!
+[Error in RUIE_Installer.iss at line X: ...]
+```
+
+**Common Causes & Solutions:**
+
+#### **Missing Files Referenced in .iss**
+The Inno Setup script tries to include files that don't exist yet.
+
+**Solution:**
+1. Make sure PyInstaller build succeeded first:
+   ```bash
+   python -m PyInstaller RUIE.spec --clean
+   ```
+
+2. Verify these files exist:
+   ```bash
+   dir dist\RUIE\RUIE.exe
+   dir icon.ico
+   dir LICENSE
+   dir README.md
+   ```
+
+3. If files are missing, build the exe first, then run:
+   ```bash
+   build_installer.bat
+   ```
+
+#### **Pascal Code Syntax Errors**
+The Pascal code in the `[Code]` section has syntax errors.
+
+**Fixed in RUIE_Installer.iss (February 1, 2026):**
+- Changed `#13#13` (incorrect line breaks) to `#13#10` (proper CRLF)
+- Added variable declarations for message strings
+- Improved message formatting
+
+If you see Pascal compilation errors:
+1. The latest version of RUIE_Installer.iss should fix these
+2. If still broken, simplify the Code section:
+   ```pascal
+   [Code]
+   procedure InitializeWizard();
+   begin
+     // Removed for debugging
+   end;
+   ```
+
+#### **Invalid File Paths**
+Inno Setup uses backslashes and expects relative paths from the .iss location.
+
+**Example Fix:**
+```ini
+[Files]
+; WRONG: Source: "c:\full\path\dist\RUIE\*"
+; RIGHT: Relative path from RUIE_Installer.iss location
+Source: "dist\RUIE\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+```
+
+#### **OutputDir Permission Denied**
+Inno Setup can't write to the output directory.
+
+**Solution:**
+1. Make sure `dist\` folder exists and is writable:
+   ```bash
+   mkdir dist
+   ```
+
+2. Close any file explorer windows showing dist/
+3. Check permissions aren't read-only:
+   - Right-click `dist` folder → Properties
+   - Uncheck "Read-only" if checked
+4. Retry compilation
+
+#### **Duplicate File Sources**
+Multiple sources pointing to same destination.
+
+**Check in RUIE_Installer.iss:**
+```ini
+[Files]
+Source: "dist\RUIE\RUIE.exe"; DestDir: "{app}"; ...  ; Line 1
+Source: "dist\RUIE\*"; DestDir: "{app}"; ...          ; Line 2 - includes exe again!
+```
+
+**Fix:** Remove duplicate entries. The wildcard `*` already includes RUIE.exe.
+
+---
+
+### Troubleshooting Inno Setup Compilation Directly
+
+If `build_installer.bat` fails, try running Inno Setup compiler directly for better error messages:
+
+```batch
+REM Open the Inno Setup IDE
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" RUIE_Installer.iss
+
+REM Or compile silently (see output in console)
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /Qp RUIE_Installer.iss
+
+REM With verbose output
+"C:\Program Files (x86)\Inno Setup 6\iscc.exe" /Qp /V RUIE_Installer.iss
+```
+
+The error messages will be more detailed and show exactly which line is problematic.
+
+---
+
 ### Issue 7: Build Takes Too Long or Hangs
 
 **Possible Causes:**

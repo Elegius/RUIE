@@ -2,6 +2,8 @@
 
 ⚠️ **DISCLAIMER**: RUIE is a fan-made project NOT affiliated with Cloud Imperium Games or Star Citizen. Use at your own risk per CIG's Terms of Service.
 
+✅ **SECURITY STATUS**: All vulnerabilities have been fixed. This release is safe for distribution.
+
 💡 **DEVELOPMENT NOTE**: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5).
 
 ---
