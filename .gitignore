@@ -18,6 +18,9 @@ build/
 *.swp
 *.swo
 *~
+__pycache__/
+*.pyc
+*.pyo
 PYTHON_MIGRATION.md
 MIGRATION_COMPLETE.md
 PROJECT_SUMMARY.md
