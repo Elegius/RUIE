@@ -911,10 +911,17 @@ def api_extracted_asset():
     if not theme_manager.extracted_dir:
         return jsonify({'success': False, 'error': 'Nothing extracted yet'}), 400
 
+    # Validate path to prevent traversal attacks
+    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
     base = Path(theme_manager.extracted_dir).resolve()
     target = (base / rel_path).resolve()
 
-    if not str(target).startswith(str(base)):
+    # Use relative_to for secure path validation
+    try:
+        target.relative_to(base)
+    except ValueError:
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
     if not target.exists() or not target.is_file():
@@ -932,6 +939,10 @@ def api_launcher_asset():
     if not theme_manager.launcher_dir:
         return jsonify({'success': False, 'error': 'Launcher not detected'}), 400
 
+    # Validate path to prevent traversal attacks
+    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
     # Look for the file in the launcher's app directory
     launcher_path = Path(theme_manager.launcher_dir)
     app_dir = launcher_path / 'resources' / 'app.asar.unpacked'
@@ -943,7 +954,10 @@ def api_launcher_asset():
     base = app_dir.resolve()
     target = (base / rel_path).resolve()
 
-    if not str(target).startswith(str(base)):
+    # Use relative_to for secure path validation
+    try:
+        target.relative_to(base)
+    except ValueError:
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
     if not target.exists() or not target.is_file():
