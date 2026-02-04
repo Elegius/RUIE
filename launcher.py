@@ -209,6 +209,50 @@ class DebugWindow(QMainWindow):
         event.accept()
 
 
+class DebugQueueHandler(logging.Handler):
+    """Custom logging handler that sends messages to debug window via signal."""
+    
+    def __init__(self, debug_window):
+        super().__init__()
+        self.debug_window = debug_window
+    
+    def emit(self, record):
+        """Send log record to debug window."""
+        try:
+            msg = self.format(record)
+            if self.debug_window and hasattr(self.debug_window, 'emitter'):
+                self.debug_window.emitter.debug_signal.emit(msg)
+        except Exception:
+            # Prevent logging errors from crashing the app
+            pass
+
+
+class DebugStdoutRedirect:
+    """Redirect stdout/stderr to debug window."""
+    
+    def __init__(self, debug_window, stream_type='stdout'):
+        self.debug_window = debug_window
+        self.stream_type = stream_type
+    
+    def write(self, message):
+        """Capture output and send to debug window."""
+        if message and message.strip():
+            try:
+                if self.debug_window and hasattr(self.debug_window, 'emitter'):
+                    self.debug_window.emitter.debug_signal.emit(message.rstrip())
+            except Exception:
+                # Fallback: write to original stderr if debug window fails
+                pass
+    
+    def flush(self):
+        """Flush buffer (no-op for this implementation)."""
+        pass
+    
+    def isatty(self):
+        """Return whether this is a terminal."""
+        return False
+
+
 class LauncherApp(QMainWindow):
     def __init__(self, port=5000):
         super().__init__()
@@ -219,6 +263,15 @@ class LauncherApp(QMainWindow):
         # Create debug window
         self.debug_window = DebugWindow(self)
         self.debug_window.show()
+        
+        # Set up logging handler to send all logs to debug window
+        debug_handler = DebugQueueHandler(self.debug_window)
+        debug_handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+        logger.addHandler(debug_handler)
+        
+        # Redirect stdout and stderr to debug window
+        sys.stdout = DebugStdoutRedirect(self.debug_window, 'stdout')
+        sys.stderr = DebugStdoutRedirect(self.debug_window, 'stderr')
         
         self.add_debug_message('[LAUNCHER] RUIE initialized')
         

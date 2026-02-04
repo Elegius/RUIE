@@ -56,8 +56,27 @@ PRODUCTION_MODE = True  # Set to True for production deployment
 # Security Boundary: Base directory where launcher must be installed
 # All file operations are validated to be within this directory
 # This prevents attackers from reading/writing arbitrary system files
-# Default: User's home directory (RSI Launcher typically installs here)
+# Default: User's home directory (fallback), but dynamically set when launcher is detected
 LAUNCHER_ROOT_DIR = os.path.abspath(os.environ.get('RSI_LAUNCHER_ROOT', os.path.expanduser('~')))
+
+def set_launcher_root_from_detected_path(launcher_info):
+    """
+    Update LAUNCHER_ROOT_DIR based on detected launcher location.
+    
+    When the launcher is successfully detected, we set the security boundary
+    to the parent directory of the launcher, ensuring that all validation
+    uses the actual launcher installation directory instead of the home directory.
+    
+    Args:
+        launcher_info: Dictionary from LauncherDetector.detect() with 'asarPath' and 'directory'
+    """
+    global LAUNCHER_ROOT_DIR
+    if launcher_info and 'asarPath' in launcher_info:
+        # Use the parent directory of the launcher as the boundary
+        # This ensures app.asar validation works against the actual launcher location
+        launcher_parent = os.path.dirname(launcher_info['directory'])
+        LAUNCHER_ROOT_DIR = os.path.abspath(launcher_parent)
+        print(f"[Security] Updated LAUNCHER_ROOT_DIR to: {LAUNCHER_ROOT_DIR}")
 
 # Determine the base path for resources (works for both dev and PyInstaller)
 def get_resource_path(relative_path):
@@ -483,6 +502,12 @@ class ThemeManager:
             True if launcher found and initialized, False otherwise
         """
         self.launcher_info = LauncherDetector.detect()
+        
+        # SECURITY: Update the security boundary to the actual launcher location
+        # This ensures path validation works correctly for the detected launcher
+        if self.launcher_info:
+            set_launcher_root_from_detected_path(self.launcher_info)
+        
         return self.launcher_info is not None
     
     def extract_asar(self):
