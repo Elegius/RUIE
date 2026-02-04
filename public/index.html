@@ -11,68 +11,24 @@
 </head>
 <body>
     <script>
-    // Create error display FIRST, before anything else
-    const errorDiv = document.createElement('div');
-    errorDiv.id = 'error-display';
-    errorDiv.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 500px; z-index: 999999; border-radius: 5px; max-height: 200px; overflow-y: auto; display: none;';
-    document.documentElement.appendChild(errorDiv);
+    // Inline initialization script
+    // All debug output now goes to the separate debug console window
     
-    function showError(msg) {
-        console.error('[ERROR]', msg);
-        errorDiv.style.display = 'block';
-        errorDiv.innerHTML = (errorDiv.innerHTML || '') + '\n' + msg;
-        // Also send to server
-        if (typeof fetch !== 'undefined') {
-            fetch('/api/debug-log', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: 'INLINE: ' + msg, level: 'ERROR' })
-            }).catch(() => {});
-        }
-    }
-    
-    // Send init message to server
-    if (typeof fetch !== 'undefined') {
-        fetch('/api/debug-log', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: 'INLINE: Inline script executing', level: 'INFO' })
-        }).catch(() => {});
-    }
-    
-    // Check if app.js loaded
-    if (typeof startApp === 'undefined') {
-        showError('CRITICAL: startApp function not found - app.js may not have loaded');
-    } else {
-        console.log('[INLINE] startApp function exists, calling it now');
-        fetch('/api/debug-log', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: 'INLINE: startApp function found, about to call', level: 'INFO' })
-        }).catch(() => {});
-    }
-    
-    // Wait for document to be ready
     function tryStartApp() {
         try {
             if (typeof startApp === 'function') {
                 console.log('[INLINE] Calling startApp()');
-                fetch('/api/debug-log', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: 'INLINE: Calling startApp()', level: 'INFO' })
-                }).catch(() => {});
                 const result = startApp();
                 if (result && typeof result.catch === 'function') {
                     result.catch(function(err) {
-                        showError('startApp error: ' + (err?.message || String(err)));
+                        console.error('[INLINE] startApp error:', err?.message || String(err));
                     });
                 }
             } else {
-                showError('startApp not a function');
+                console.error('[INLINE] startApp not found or not a function');
             }
         } catch (err) {
-            showError('Error calling startApp: ' + (err?.message || String(err)));
+            console.error('[INLINE] Error calling startApp:', err?.message || String(err));
         }
     }
     
@@ -91,7 +47,7 @@
         <header class="header">
             <div class="header-content">
                 <h1>RUIE</h1>
-                <button id="update-manager-btn" class="header-update-btn" onclick="openUpdateManager()" title="Check for updates and manage versions">⚙️ Update Manager</button>
+                <button id="update-manager-btn" class="header-update-btn" title="Check for updates and manage versions">⚙️ Update Manager</button>
             </div>
         </header>
 
@@ -108,13 +64,17 @@
                         <h3 style="margin: 0;">📍 App.asar Detection & Selection</h3>
                     </div>
                     <div class="form-group" style="display: flex; align-items: center; gap: 15px; width: 100%;">
-                        <div style="display: flex; align-items: center; gap: 10px; flex: 1;">
-                            <input type="text" id="asarPath" placeholder="Path to app.asar" style="flex: 1; cursor: pointer;">
-                            <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar" onclick="browseForAsar()">✓</span>
+                        <div style="display: flex; align-items: center; gap: 10px; flex: 1; position: relative;">
+                            <input type="text" id="asarPath" placeholder="Path to app.asar" 
+                                   style="flex: 1; cursor: pointer; overflow: hidden; text-overflow: ellipsis; color: #d0d0d0;" 
+                                   readonly title="Full path will appear here when selected"
+                                   onmouseover="showFullPath(this)" onmouseout="hideFullPath(this)">
+                            <span id="path-success-indicator" style="display: none; color: #64c864; font-size: 1.5em; cursor: pointer;" title="Click to browse for app.asar">✓</span>
+                            <div id="path-tooltip" style="display: none; position: absolute; bottom: -30px; left: 0; background: #1a1a2e; border: 1px solid #64c864; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; white-space: nowrap; z-index: 1000;"></div>
                         </div>
                         <div style="display: flex; gap: 10px;">
-                            <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="browseForAsar()">📁 Browse</button>
-                            <button class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="detectLauncher()">🔍 Auto-Detect</button>
+                            <button id="browse-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="browseForAsar()">📁 Browse</button>
+                            <button id="detect-launcher-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="detectLauncher()">🔍 Auto-Detect</button>
                             <button id="init-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="initSession()">Initialize</button>
                         </div>
                     </div>
@@ -133,7 +93,8 @@
                         
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Decompile app.asar</button>
-                            <button class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
+                            <button id="open-latest-extract-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
+                            <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Folder</button>
                         </div>
 
                         <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
@@ -155,8 +116,9 @@
                         <h3>Backup Manager</h3>
                         <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Manage your backups. Create snapshots before making changes.</p>
                         
-                        <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center;">
-                            <button class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
+                        <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px;">
+                            <button id="create-backup-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
+                            <button id="open-backups-folder-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open Folder</button>
                         </div>
 
                         <h4 style="color: #8db4d0; margin: 15px 0 10px 0; font-size: 0.95em;">Existing Backups</h4>

@@ -1,3 +1,6 @@
+// CRITICAL: app.js has loaded
+console.log('[app.js] FILE LOADED - ready to execute');
+
 /**
  * RUIE Main Application JavaScript
  * ================================
@@ -57,43 +60,23 @@ sendDebugToServer('app.js loaded successfully');
 /**
  * Global error handler for uncaught exceptions
  * 
- * Catches errors that escape try-catch blocks and displays them
- * on screen in a red error box for user visibility, plus logs to server
+ * Logs errors to server debug console and browser console
+ * All debug output goes to the separate debug console window
  */
 window.addEventListener('error', function(event) {
     console.error('[GLOBAL ERROR]', event.filename, event.lineno, event.message);
     sendDebugToServer(`ERROR at ${event.filename}:${event.lineno} - ${event.message}`, 'ERROR');
-    
-    // Create or update error display box
-    const errorDiv = document.getElementById('error-display') || (function() {
-        const div = document.createElement('div');
-        div.id = 'error-display';
-        div.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 600px; z-index: 999999; border-radius: 5px; max-height: 300px; overflow-y: auto;';
-        document.documentElement.appendChild(div);
-        return div;
-    })();
-    errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\n${event.filename}:${event.lineno} ${event.message}`;
 });
 
 /**
  * Global handler for unhandled promise rejections
  * 
  * Catches promises that reject without a .catch() handler
- * and displays them for debugging
+ * and logs them to server debug console
  */
 window.addEventListener('unhandledrejection', function(event) {
     console.error('[UNHANDLED REJECTION]', event.reason);
     sendDebugToServer(`UNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`, 'ERROR');
-    
-    // Create or update error display box
-    const errorDiv = document.getElementById('error-display') || (function() {
-        const div = document.createElement('div');
-        div.id = 'error-display';
-        div.style.cssText = 'position: fixed; top: 10px; left: 10px; background: #ff3333; color: white; padding: 15px; font-family: monospace; font-size: 12px; max-width: 600px; z-index: 999999; border-radius: 5px; max-height: 300px; overflow-y: auto;';
-        document.documentElement.appendChild(div);
-        return div;
-    })();
-    errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\nUNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`;
 });
 
 /**
@@ -126,6 +109,53 @@ const state = {
     currentPage: 1,           // Current step (1-6)
     selectedExtractPath: null // Track selected extraction for "Use Selected" button
 };
+
+// ============================================================================
+// REAL-TIME LIST POLLING
+// ============================================================================
+let backupsPollTimer = null;
+let extractsPollTimer = null;
+let backupsPollInFlight = false;
+let extractsPollInFlight = false;
+
+function stopListPolling() {
+    if (backupsPollTimer) {
+        clearInterval(backupsPollTimer);
+        backupsPollTimer = null;
+    }
+    if (extractsPollTimer) {
+        clearInterval(extractsPollTimer);
+        extractsPollTimer = null;
+    }
+}
+
+function startListPolling(intervalMs = 5000) {
+    stopListPolling();
+
+    backupsPollTimer = setInterval(async () => {
+        if (backupsPollInFlight) return;
+        backupsPollInFlight = true;
+        try {
+            await loadBackupsList();
+        } catch (e) {
+            console.warn('[poll] Error refreshing backups list:', e);
+        } finally {
+            backupsPollInFlight = false;
+        }
+    }, intervalMs);
+
+    extractsPollTimer = setInterval(async () => {
+        if (extractsPollInFlight) return;
+        extractsPollInFlight = true;
+        try {
+            await loadExtractedASARList();
+        } catch (e) {
+            console.warn('[poll] Error refreshing extracts list:', e);
+        } finally {
+            extractsPollInFlight = false;
+        }
+    }, intervalMs);
+}
 
 /**
  * Persisted preview state
@@ -681,6 +711,82 @@ function browseForAsar() {
 }
 
 /**
+ * Show full path tooltip on hover
+ */
+function showFullPath(inputElement) {
+    const fullPath = inputElement.value;
+    if (fullPath) {
+        const tooltip = document.getElementById('path-tooltip');
+        if (tooltip) {
+            tooltip.textContent = fullPath;
+            tooltip.style.display = 'block';
+        }
+    }
+}
+
+/**
+ * Hide full path tooltip
+ */
+function hideFullPath(inputElement) {
+    const tooltip = document.getElementById('path-tooltip');
+    if (tooltip) {
+        tooltip.style.display = 'none';
+    }
+}
+
+/**
+ * Open the backups folder in system file explorer
+ */
+function openBackupsFolder() {
+    fetch('/api/open-backups-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatus('init-status', '📂 Opening backups folder...', 'info');
+            setTimeout(() => {
+                const statusEl = document.getElementById('init-status');
+                if (statusEl) statusEl.style.display = 'none';
+            }, 1500);
+        } else {
+            showStatus('init-status', 'Error: ' + (data.error || 'Failed to open folder'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('[openBackupsFolder] Error:', error);
+        showStatus('init-status', 'Error opening folder: ' + error.message, 'error');
+    });
+}
+
+/**
+ * Open the extractions folder in system file explorer
+ */
+function openExtractionsFolder() {
+    fetch('/api/open-extractions-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showStatus('extract-status', '📂 Opening extractions folder...', 'info');
+            setTimeout(() => {
+                const statusEl = document.getElementById('extract-status');
+                if (statusEl) statusEl.style.display = 'none';
+            }, 1500);
+        } else {
+            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to open folder'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('[openExtractionsFolder] Error:', error);
+        showStatus('extract-status', 'Error opening folder: ' + error.message, 'error');
+    });
+}
+
+/**
  * Auto-detect RSI Launcher installation
  */
 async function detectLauncher(options = {}) {
@@ -740,12 +846,29 @@ async function detectLauncher(options = {}) {
         if (autoInit) {
             console.log('[detectLauncher] Auto-initializing session');
             setTimeout(() => initSession(), 500);
+        } else {
+            // Hide the status message after a brief moment when not auto-initializing
+            setTimeout(() => {
+                const statusEl = document.getElementById('init-status');
+                if (statusEl) {
+                    statusEl.style.display = 'none';
+                }
+            }, 1500);
         }
 
     } catch (error) {
         console.error('[detectLauncher] Error:', error.message);
         if (!silentFailure) {
             showStatus('init-status', '✗ Error: ' + error.message, 'error');
+        }
+        // Hide error message after 3 seconds on silentFailure
+        if (silentFailure) {
+            setTimeout(() => {
+                const statusEl = document.getElementById('init-status');
+                if (statusEl) {
+                    statusEl.style.display = 'none';
+                }
+            }, 3000);
         }
     }
 }
@@ -811,6 +934,14 @@ async function initSession() {
             initBtn.innerHTML = '✓';
         }
         
+        // Hide the initializing status message after a brief moment
+        setTimeout(() => {
+            const statusEl = document.getElementById('init-status');
+            if (statusEl) {
+                statusEl.style.display = 'none';
+            }
+        }, 500);
+        
         // Load extracted list but don't auto-navigate
         loadExtractedList();
 
@@ -869,26 +1000,35 @@ function startExtractPolling() {
  * Extract asar
  */
 async function extractAsar() {
+    console.log('[extractAsar] CALLED - starting ASAR extraction');
     const extractButton = document.getElementById('extract-btn');
-    if (extractButton) extractButton.disabled = true;
+    if (extractButton) {
+        extractButton.disabled = true;
+        console.log('[extractAsar] Extract button disabled');
+    }
 
     // Hide status, only show progress bar
     const statusEl = document.getElementById('extract-status');
     if (statusEl) statusEl.style.display = 'none';
     
-    setExtractProgress(true, 5, 'Starting extraction...');
+    setExtractProgress(true, 5, '📦 Starting extraction...');
+    console.log('[extractAsar] Progress bar shown, starting polling');
     startExtractPolling();
 
     try {
+        console.log('[extractAsar] Sending POST to /api/extract');
         const response = await fetch('/api/extract', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' }
         });
+        console.log('[extractAsar] Response received:', response.status);
 
         let data = {};
         try {
             data = await response.json();
+            console.log('[extractAsar] Response parsed:', data);
         } catch (parseError) {
+            console.error('[extractAsar] Failed to parse response:', parseError);
             data = { error: 'Server returned an unexpected response.' };
         }
 
@@ -900,6 +1040,7 @@ async function extractAsar() {
         state.extracted = true;
         setExtractProgress(true, 100, 'Extraction complete');
         showStatus('extract-status', '✓ Extracted successfully', 'success');
+        console.log('[extractAsar] Extraction successful, loading list');
         
         // Reload the extracted ASAR list to show the new extraction
         await loadExtractedASARList();
@@ -911,13 +1052,17 @@ async function extractAsar() {
         }, 500);
 
     } catch (error) {
+        console.error('[extractAsar] Error:', error.message);
         const message = error?.message?.includes('Failed to fetch')
             ? 'Failed to fetch. The local server may have stopped. Please restart the app.'
             : error.message;
         showStatus('extract-status', message, 'error');
         setExtractProgress(true, 0, 'Extraction failed');
     } finally {
-        if (extractButton) extractButton.disabled = false;
+        if (extractButton) {
+            extractButton.disabled = false;
+            console.log('[extractAsar] Extract button re-enabled');
+        }
     }
 }
 
@@ -1137,6 +1282,9 @@ async function deleteBackup(path) {
         return;
     }
     
+    // Show progress indicator
+    showStatus('init-status', '🗑️ Deleting backup...', 'info');
+    
     try {
         const response = await fetch('/api/delete-backup', {
             method: 'POST',
@@ -1147,13 +1295,17 @@ async function deleteBackup(path) {
         const data = await response.json();
         
         if (data.success) {
-            showStatus('extract-status', '✓ Backup deleted', 'success');
-            loadBackups();
+            showStatus('init-status', '✓ Backup deleted successfully', 'success');
+            setTimeout(() => {
+                const statusEl = document.getElementById('init-status');
+                if (statusEl) statusEl.style.display = 'none';
+            }, 2000);
+            loadBackupsList();
         } else {
-            showStatus('extract-status', 'Error: ' + (data.error || 'Failed to delete backup'), 'error');
+            showStatus('init-status', 'Error: ' + (data.error || 'Failed to delete backup'), 'error');
         }
     } catch (error) {
-        showStatus('extract-status', 'Error: ' + error.message, 'error');
+        showStatus('init-status', 'Error: ' + error.message, 'error');
     }
 }
 
@@ -1353,12 +1505,12 @@ async function loadBackupsList() {
             const restoreBtn = document.createElement('button');
             restoreBtn.className = 'btn btn-secondary';
             restoreBtn.textContent = '↻ Restore';
-            restoreBtn.onclick = () => restoreBackup(backup.id || backup.name);
+            restoreBtn.onclick = () => restoreBackup(backup.path || backup.name);
             
             const deleteBtn = document.createElement('button');
             deleteBtn.className = 'btn btn-secondary';
             deleteBtn.textContent = '✕ Delete';
-            deleteBtn.onclick = () => deleteBackup(backup.id || backup.name);
+            deleteBtn.onclick = () => deleteBackup(backup.path || backup.name);
             
             actionsDiv.appendChild(restoreBtn);
             actionsDiv.appendChild(deleteBtn);
@@ -1386,6 +1538,9 @@ async function createNewBackup() {
         return;
     }
 
+    // Show progress indicator
+    showStatus('init-status', '📦 Creating backup...', 'info');
+
     try {
         const response = await fetch('/api/backups', {
             method: 'POST',
@@ -1402,6 +1557,10 @@ async function createNewBackup() {
         }
 
         showStatus('init-status', '✓ Backup created successfully', 'success');
+        setTimeout(() => {
+            const statusEl = document.getElementById('init-status');
+            if (statusEl) statusEl.style.display = 'none';
+        }, 2000);
         await loadBackupsList();
     } catch (error) {
         showStatus('init-status', error.message, 'error');
@@ -1411,54 +1570,6 @@ async function createNewBackup() {
 /**
  * Restore a backup
  */
-async function restoreBackup(backupId) {
-    if (!confirm('Are you sure you want to restore this backup? Current changes will be overwritten.')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/backups/${backupId}/restore`, {
-            method: 'POST'
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to restore backup');
-        }
-
-        showStatus('init-status', '✓ Backup restored successfully', 'success');
-        await loadBackupsList();
-    } catch (error) {
-        showStatus('init-status', error.message, 'error');
-    }
-}
-
-/**
- * Delete a backup
- */
-async function deleteBackup(backupId) {
-    if (!confirm('Are you sure you want to delete this backup? This cannot be undone.')) {
-        return;
-    }
-
-    try {
-        const response = await fetch(`/api/backups/${backupId}`, {
-            method: 'DELETE'
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || 'Failed to delete backup');
-        }
-
-        showStatus('init-status', '✓ Backup deleted successfully', 'success');
-        await loadBackupsList();
-    } catch (error) {
-        showStatus('init-status', error.message, 'error');
-    }
-}
 
 /**
  * Load and display extracted ASAR list
@@ -1586,6 +1697,8 @@ async function deleteExtractedASAR(path, name) {
         return;
     }
 
+    showStatus('extract-status', '🗑️ Deleting extraction...', 'info');
+
     try {
         const response = await fetch('/api/delete-extract', {
             method: 'POST',
@@ -1599,10 +1712,14 @@ async function deleteExtractedASAR(path, name) {
             throw new Error(data.error || 'Failed to delete extraction');
         }
 
-        showStatus('init-status', '✓ Extracted ASAR deleted successfully', 'success');
+        showStatus('extract-status', '✓ Extracted ASAR deleted successfully', 'success');
+        setTimeout(() => {
+            const statusEl = document.getElementById('extract-status');
+            if (statusEl) statusEl.style.display = 'none';
+        }, 2000);
         await loadExtractedASARList();
     } catch (error) {
-        showStatus('init-status', error.message, 'error');
+        showStatus('extract-status', error.message, 'error');
     }
 }
 
@@ -3508,6 +3625,10 @@ function showUpdateNotification(latestVersion, releaseUrl, releaseNotes) {
 window.addEventListener('load', () => { console.log('[EVENT] window load event fired'); startApp(); });
 document.addEventListener('DOMContentLoaded', () => { console.log('[EVENT] DOMContentLoaded event fired'); startApp(); });
 
+window.addEventListener('beforeunload', () => {
+    stopListPolling();
+});
+
 // Also run immediately if DOM is already ready
 if (document.readyState === 'loading') {
     // DOM is still loading, wait for DOMContentLoaded
@@ -3636,20 +3757,6 @@ async function startApp() {
     sendDebugToServer('Setting window.appStarted = true');
     window.appStarted = true;
     
-    // Write a visible indicator on the page that startApp is running
-    if (document.body) {
-        const startupIndicator = document.createElement('div');
-        startupIndicator.id = 'startup-indicator';
-        startupIndicator.style.cssText = 'position: fixed; top: 40px; left: 10px; background: blue; color: white; padding: 10px; font-family: monospace; z-index: 99999; border-radius: 5px;';
-        startupIndicator.innerHTML = 'startApp is running...';
-        document.body.appendChild(startupIndicator);
-        console.log('[startApp] Added visible startup indicator');
-        sendDebugToServer('Added visible startup indicator');
-    } else {
-        console.error('[startApp] document.body does not exist');
-        sendDebugToServer('ERROR: document.body does not exist', 'ERROR');
-    }
-    
     try {
         // Initialize DOM cache first for performance
         console.log('[startApp] Starting initialization');
@@ -3675,28 +3782,32 @@ async function startApp() {
             sendDebugToServer('ERROR: Update Manager button not found in DOM', 'ERROR');
         }
         
-        // Write debug info to the page itself
-        console.log('[startApp] Creating debug element');
-        const debugEl = document.createElement('div');
-        debugEl.id = 'debug-info';
-        debugEl.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.8); color: #0f0; padding: 10px; font-family: monospace; font-size: 11px; max-width: 400px; z-index: 9999; white-space: pre-wrap;';
-        debugEl.innerHTML = '[INIT] Starting...';
-        console.log('[startApp] Appending debug element to document.body');
-        document.body.appendChild(debugEl);
-        console.log('[startApp] Debug element appended');
-        const appendDebug = (msg) => { debugEl.innerHTML += '\n[' + new Date().toLocaleTimeString() + '] ' + msg; debugEl.scrollTop = debugEl.scrollHeight; };
+        // DEBUG: All debug output now goes to the separate debug console window
+        // No on-screen debug display needed since we have a dedicated console
+        const appendDebug = (msg) => { 
+            // Send to server debug console instead of displaying on screen
+            sendDebugToServer(msg, 'DEBUG');
+            console.log('[DEBUG] ' + msg);
+        };
 
         appendDebug('DOM initialized');
-        console.log('[window.load] Loading preset files...');
-        await loadPresetFiles();
-        appendDebug('Presets loaded');
-        console.log('[window.load] Preset files loaded');
-        
-        // Initialize page navigation - start on initialization page (step 1)
         console.log('[window.load] Navigating to page 1...');
         navigateToPage(1);
         appendDebug('Page navigation done');
         console.log('[window.load] Page navigation complete');
+        
+        // Load presets in background with timeout
+        console.log('[window.load] Loading preset files...');
+        Promise.race([
+            loadPresetFiles(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Preset loading timeout')), 5000))
+        ]).then(() => {
+            appendDebug('Presets loaded');
+            console.log('[window.load] Preset files loaded');
+        }).catch((err) => {
+            console.warn('[window.load] Preset loading failed, continuing anyway:', err.message);
+            appendDebug('Warning: Preset loading timeout, continuing');
+        });
         
         // Detect and initialize launcher FIRST
         console.log('[window.load] Calling detectLauncher...');
@@ -3717,6 +3828,21 @@ async function startApp() {
             appendDebug('Backup error: ' + e.message);
             console.warn('[window.load] Error loading backups:', e);
         }
+
+        // Load initial extracted list
+        try {
+            console.log('[window.load] Loading extractions...');
+            appendDebug('Loading extractions...');
+            await loadExtractedASARList();
+            appendDebug('Extractions loaded');
+            console.log('[window.load] Extractions loaded');
+        } catch (e) {
+            appendDebug('Extraction error: ' + e.message);
+            console.warn('[window.load] Error loading extractions:', e);
+        }
+
+        // Start real-time polling for backups/extractions
+        startListPolling(5000);
         
         // Load extracted ASAR list (only after launcher is detected)
         try {
@@ -3729,6 +3855,51 @@ async function startApp() {
             appendDebug('Extracted ASAR error: ' + e.message);
             console.warn('[window.load] Error loading extracted ASARs:', e);
         }
+        
+        // CRITICAL: Attach button event listeners
+        console.log('[startApp] Attaching button event listeners...');
+        
+        // Extract/Decompile ASAR button
+        const extractBtn = document.getElementById('extract-btn');
+        if (extractBtn) {
+            extractBtn.addEventListener('click', extractAsar);
+            console.log('[startApp] ✓ Extract button listener attached');
+        } else {
+            console.warn('[startApp] ✗ Extract button not found');
+        }
+        
+        // Next button (each page)
+        const nextButtons = document.querySelectorAll('[id^="next-"]');
+        nextButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const currentPage = parseInt(this.id.split('-')[1]);
+                navigateToPage(currentPage + 1);
+            });
+        });
+        console.log(`[startApp] ✓ Attached ${nextButtons.length} next buttons`);
+        
+        // Previous button (each page)
+        const prevButtons = document.querySelectorAll('[id^="prev-"]');
+        prevButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const currentPage = parseInt(this.id.split('-')[1]);
+                navigateToPage(currentPage - 1);
+            });
+        });
+        console.log(`[startApp] ✓ Attached ${prevButtons.length} previous buttons`);
+        
+        // Color preset buttons
+        const presetButtons = document.querySelectorAll('[data-preset-id]');
+        presetButtons.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const presetId = this.getAttribute('data-preset-id');
+                if (presetId && colorPresets[presetId]) {
+                    state.colors = { ...colorPresets[presetId].colors };
+                    renderColorMappings();
+                }
+            });
+        });
+        console.log(`[startApp] ✓ Attached ${presetButtons.length} color preset buttons`);
         
         // Check for updates asynchronously (non-blocking)
         setTimeout(() => {
