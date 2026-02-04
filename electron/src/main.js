@@ -181,31 +181,8 @@ function createWindow() {
  */
 app.on('ready', async () => {
   try {
-    if (process.platform === 'win32') {
-      const isAdmin = isRunningAsAdminWindows();
-      const isElevatedAttempt = process.argv.includes(ELEVATION_FLAG);
-
-      if (!isAdmin && !isElevatedAttempt) {
-        console.log('[ELECTRON] Not running as admin, relaunching elevated...');
-        relaunchAsAdminWindows();
-        dialog.showErrorBox(
-          'Administrator Required',
-          'RUIE needs administrator privileges to run. Please approve the UAC prompt.'
-        );
-        app.quit();
-        return;
-      }
-
-      if (!isAdmin && isElevatedAttempt) {
-        dialog.showErrorBox(
-          'Administrator Required',
-          'Administrator privileges were not granted. Please relaunch and approve the UAC prompt.'
-        );
-        app.quit();
-        return;
-      }
-    }
-
+    // Elevation is now handled by launch.bat, so we skip the check here
+    // If running from npm start directly without admin, that's a user error
     console.log('[ELECTRON] App ready, starting Flask server...');
     await startFlaskServer();
     console.log('[ELECTRON] Flask server started, creating window...');
