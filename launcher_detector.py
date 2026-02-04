@@ -81,6 +81,13 @@ class LauncherDetector:
         alternative_paths = [
             r'C:\Games\Roberts Space Industries\RSI Launcher\RSI Launcher.exe',
             r'C:\Games\RSI\RSI Launcher\RSI Launcher.exe',
+            r'C:\RSI Launcher\RSI Launcher.exe',
+            r'D:\Roberts Space Industries\RSI Launcher\RSI Launcher.exe',
+            r'D:\Games\Roberts Space Industries\RSI Launcher\RSI Launcher.exe',
+            r'D:\RSI Launcher\RSI Launcher.exe',
+            r'E:\Roberts Space Industries\RSI Launcher\RSI Launcher.exe',
+            r'E:\Games\Roberts Space Industries\RSI Launcher\RSI Launcher.exe',
+            r'E:\RSI Launcher\RSI Launcher.exe',
         ]
         
         # Check Windows Registry for installation location
@@ -104,6 +111,7 @@ class LauncherDetector:
                                                 if install_location:
                                                     exe_path = os.path.join(install_location, 'RSI Launcher.exe')
                                                     registry_paths.append(exe_path)
+                                                    print(f"[LauncherDetector.get_launcher_paths] Found in registry: {exe_path}")
                                             except:
                                                 pass
                                     except:
@@ -116,7 +124,11 @@ class LauncherDetector:
         # Combine paths: Program Files first, then registry paths, then alternatives
         # This preserves detection priority while avoiding duplicates
         all_paths = paths + registry_paths + alternative_paths
-        return list(dict.fromkeys(all_paths))  # Remove duplicates while preserving order
+        final_paths = list(dict.fromkeys(all_paths))  # Remove duplicates while preserving order
+        print(f"[LauncherDetector.get_launcher_paths] Will check {len(final_paths)} paths")
+        for i, p in enumerate(final_paths, 1):
+            print(f"[LauncherDetector.get_launcher_paths]   {i}. {p}")
+        return final_paths
     
     @staticmethod
     def find_asar(launcher_path, max_depth=8):

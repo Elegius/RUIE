@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RUIE Diagnostics</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            margin: 20px; 
+            background: #1a1a1a;
+            color: #00ff00;
+        }
+        .log { 
+            background: #000; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border: 1px solid #00ff00;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .error { color: #ff4444; }
+        .success { color: #44ff44; }
+        .info { color: #4444ff; }
+    </style>
+</head>
+<body>
+    <h1>RUIE Diagnostics</h1>
+    <div id="log" class="log"></div>
+    
+    <script>
+        const log = document.getElementById('log');
+        
+        function addLog(msg, type = 'info') {
+            const div = document.createElement('div');
+            div.className = type;
+            div.textContent = new Date().toISOString().substr(11, 12) + ' ' + msg;
+            log.appendChild(div);
+            console.log(msg);
+        }
+        
+        addLog('Starting diagnostics...', 'info');
+        
+        // Override console methods to capture output
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        console.log = function(...args) {
+            addLog(args.join(' '), 'info');
+            originalLog.apply(console, args);
+        };
+        
+        console.error = function(...args) {
+            addLog('ERROR: ' + args.join(' '), 'error');
+            originalError.apply(console, args);
+        };
+        
+        console.warn = function(...args) {
+            addLog('WARN: ' + args.join(' '), 'error');
+            originalWarn.apply(console, args);
+        };
+        
+        addLog('Loading app.js...', 'info');
+    </script>
+    
+    <!-- Load app.js -->
+    <script src="app.js?v=20260201"></script>
+    
+    <script>
+        addLog('app.js loaded, checking functions...', 'info');
+        addLog('typeof startApp: ' + typeof startApp, 'info');
+        addLog('typeof DOM: ' + typeof DOM, 'info');
+        addLog('typeof detectLauncher: ' + typeof detectLauncher, 'info');
+        
+        // Wait for DOM
+        document.addEventListener('DOMContentLoaded', async function() {
+            addLog('DOM ready', 'success');
+            addLog('document.body exists: ' + !!document.body, 'info');
+            
+            // Try to call startApp
+            if (typeof startApp === 'function') {
+                addLog('Calling startApp()...', 'info');
+                try {
+                    await startApp();
+                    addLog('startApp() completed successfully', 'success');
+                } catch (error) {
+                    addLog('startApp() failed: ' + error.message, 'error');
+                    addLog('Stack: ' + error.stack, 'error');
+                }
+            } else {
+                addLog('startApp function not found!', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -745,18 +745,18 @@ function openBackupsFolder() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            showStatus('init-status', '📂 Opening backups folder...', 'info');
+            showStatus('backups-status', '📂 Opening backups folder...', 'info');
             setTimeout(() => {
-                const statusEl = document.getElementById('init-status');
+                const statusEl = document.getElementById('backups-status');
                 if (statusEl) statusEl.style.display = 'none';
             }, 1500);
         } else {
-            showStatus('init-status', 'Error: ' + (data.error || 'Failed to open folder'), 'error');
+            showStatus('backups-status', 'Error: ' + (data.error || 'Failed to open folder'), 'error');
         }
     })
     .catch(error => {
         console.error('[openBackupsFolder] Error:', error);
-        showStatus('init-status', 'Error opening folder: ' + error.message, 'error');
+        showStatus('backups-status', 'Error opening folder: ' + error.message, 'error');
     });
 }
 
@@ -794,18 +794,22 @@ async function detectLauncher(options = {}) {
 
     try {
         console.log('[detectLauncher] Starting auto-detect...');
+        console.log('[detectLauncher] Options:', { autoInit, silentFailure });
         
         // Show loading feedback
         showStatus('init-status', 'Auto-detecting RSI Launcher...', 'info');
+        console.log('[detectLauncher] Status message shown');
         
         console.log('[detectLauncher] Fetching /api/detect-launcher');
         const response = await fetch('/api/detect-launcher');
+        console.log('[detectLauncher] Fetch completed, status:', response.status, response.statusText);
+        
         const data = await response.json();
-
-        console.log('[detectLauncher] Response:', data);
+        console.log('[detectLauncher] Response parsed:', data);
 
         if (!response.ok) {
-            throw new Error(data.error || data.message || 'Launcher not found');
+            console.error('[detectLauncher] Response not OK:', response.status);
+            throw new Error(data.error || data.message || `HTTP ${response.status}: Launcher not found`);
         }
 
         if (!data.launcher || !data.launcher.asarPath) {
@@ -840,26 +844,40 @@ async function detectLauncher(options = {}) {
         }
         
         // Show success message and green indicator
-        showStatus('init-status', '✓ Launcher detected', 'success');
+        showStatus('init-status', '✓ Launcher detected successfully!', 'success');
+        console.log('[detectLauncher] Success message displayed');
         
         // If autoInit is true, initialize session after showing the path
         if (autoInit) {
-            console.log('[detectLauncher] Auto-initializing session');
+            console.log('[detectLauncher] Auto-initializing session in 500ms');
             setTimeout(() => initSession(), 500);
         } else {
-            // Hide the status message after a brief moment when not auto-initializing
+            // Hide the status message after 5 seconds when not auto-initializing (longer visibility)
+            console.log('[detectLauncher] Will hide status after 5 seconds');
             setTimeout(() => {
                 const statusEl = document.getElementById('init-status');
-                if (statusEl) {
-                    statusEl.style.display = 'none';
+                if (statusEl && statusEl.classList.contains('show')) {
+                    console.log('[detectLauncher] Hiding status message');
+                    statusEl.classList.remove('show');
                 }
-            }, 1500);
+            }, 5000);
         }
 
     } catch (error) {
-        console.error('[detectLauncher] Error:', error.message);
+        console.error('[detectLauncher] CATCH BLOCK - Error:', error.message, error);
         if (!silentFailure) {
-            showStatus('init-status', '✗ Error: ' + error.message, 'error');
+            let errorMsg = '✗ Detection failed: ';
+            if (error.message.includes('not found')) {
+                errorMsg += 'RSI Launcher not found. Click "Browse" to manually select app.asar';
+            } else if (error.message.includes('HTTP')) {
+                errorMsg += error.message;
+            } else {
+                errorMsg += error.message;
+            }
+            console.log('[detectLauncher] Showing error message:', errorMsg);
+            showStatus('init-status', errorMsg, 'warning');
+        } else {
+            console.log('[detectLauncher] silentFailure is true, not showing error');
         }
         // Hide error message after 3 seconds on silentFailure
         if (silentFailure) {
@@ -3809,10 +3827,10 @@ async function startApp() {
             appendDebug('Warning: Preset loading timeout, continuing');
         });
         
-        // Detect and initialize launcher FIRST
+        // Detect and initialize launcher FIRST (silently - don't auto-init)
         console.log('[window.load] Calling detectLauncher...');
         appendDebug('Calling detectLauncher...');
-        await detectLauncher({ autoInit: true, silentFailure: false });
+        await detectLauncher({ autoInit: false, silentFailure: true });
         appendDebug('detectLauncher complete');
         appendDebug('asarPath value: ' + (DOM.asarPath?.value || 'EMPTY'));
         console.log('[window.load] detectLauncher complete, asarPath value:', DOM.asarPath?.value);
@@ -3859,10 +3877,55 @@ async function startApp() {
         // CRITICAL: Attach button event listeners
         console.log('[startApp] Attaching button event listeners...');
         
+        // Auto-Detect Launcher button
+        const detectBtn = document.getElementById('detect-launcher-btn');
+        if (detectBtn) {
+            detectBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[startApp] Detect button clicked');
+                detectLauncher({ autoInit: false, silentFailure: false }).catch(err => {
+                    console.error('[detect button] Error:', err);
+                });
+            });
+            console.log('[startApp] ✓ Detect Launcher button listener attached');
+        } else {
+            console.warn('[startApp] ✗ Detect Launcher button not found');
+        }
+        
+        // Browse for ASAR button
+        const browseBtn = document.getElementById('browse-btn');
+        if (browseBtn) {
+            browseBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[startApp] Browse button clicked');
+                browseForAsar();
+            });
+            console.log('[startApp] ✓ Browse button listener attached');
+        } else {
+            console.warn('[startApp] ✗ Browse button not found');
+        }
+        
+        // Initialize Session button
+        const initBtn = document.getElementById('init-btn');
+        if (initBtn) {
+            initBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[startApp] Init button clicked');
+                initSession();
+            });
+            console.log('[startApp] ✓ Initialize button listener attached');
+        } else {
+            console.warn('[startApp] ✗ Initialize button not found');
+        }
+        
         // Extract/Decompile ASAR button
         const extractBtn = document.getElementById('extract-btn');
         if (extractBtn) {
-            extractBtn.addEventListener('click', extractAsar);
+            extractBtn.addEventListener('click', function(e) {
+                e.preventDefault();
+                console.log('[startApp] Extract button clicked');
+                extractAsar();
+            });
             console.log('[startApp] ✓ Extract button listener attached');
         } else {
             console.warn('[startApp] ✗ Extract button not found');

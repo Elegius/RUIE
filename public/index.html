@@ -9,37 +9,184 @@
     <!-- Load app.js first -->
     <script src="app.js?v=20260201"></script>
 </head>
-<body>
-    <script>
-    // Inline initialization script
-    // All debug output now goes to the separate debug console window
-    
-    function tryStartApp() {
-        try {
-            if (typeof startApp === 'function') {
-                console.log('[INLINE] Calling startApp()');
-                const result = startApp();
-                if (result && typeof result.catch === 'function') {
-                    result.catch(function(err) {
-                        console.error('[INLINE] startApp error:', err?.message || String(err));
-                    });
-                }
-            } else {
-                console.error('[INLINE] startApp not found or not a function');
+<body style="margin: 0; padding: 0; background: #0a0e27; min-height: 100vh;">
+    <!-- Modern Loading Screen with Progress Indicator -->
+    <div id="app-loading" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, #0a0e27 0%, #16213e 100%); display: flex !important; align-items: center; justify-content: center; z-index: 99999; visibility: visible !important; overflow: hidden;">
+        <!-- Animated background particles -->
+        <div style="position: absolute; width: 100%; height: 100%; overflow: hidden; opacity: 0.3;">
+            <div style="position: absolute; width: 2px; height: 2px; background: #00c8ff; border-radius: 50%; top: 20%; left: 10%; box-shadow: 0 0 10px #00c8ff; animation: twinkle 3s infinite;"></div>
+            <div style="position: absolute; width: 2px; height: 2px; background: #00c8ff; border-radius: 50%; top: 60%; left: 80%; box-shadow: 0 0 10px #00c8ff; animation: twinkle 4s infinite 1s;"></div>
+            <div style="position: absolute; width: 2px; height: 2px; background: #00c8ff; border-radius: 50%; top: 40%; left: 50%; box-shadow: 0 0 10px #00c8ff; animation: twinkle 5s infinite 2s;"></div>
+            <div style="position: absolute; width: 2px; height: 2px; background: #00c8ff; border-radius: 50%; top: 80%; left: 30%; box-shadow: 0 0 10px #00c8ff; animation: twinkle 3.5s infinite 0.5s;"></div>
+        </div>
+        
+        <!-- Main loading container -->
+        <div style="text-align: center; position: relative; z-index: 1; max-width: 500px; padding: 40px;">
+            <!-- Glassmorphic card -->
+            <div style="background: rgba(22, 33, 62, 0.6); backdrop-filter: blur(20px); border: 1px solid rgba(0, 200, 255, 0.2); border-radius: 20px; padding: 50px 40px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05);">
+                <!-- Logo/Icon -->
+                <div style="margin-bottom: 30px;">
+                    <div style="display: inline-block; position: relative;">
+                        <svg width="80" height="80" viewBox="0 0 80 80" style="filter: drop-shadow(0 0 20px rgba(0, 200, 255, 0.5));">
+                            <circle cx="40" cy="40" r="35" fill="none" stroke="url(#gradient1)" stroke-width="2" opacity="0.3"/>
+                            <circle cx="40" cy="40" r="30" fill="none" stroke="url(#gradient1)" stroke-width="2" opacity="0.5"/>
+                            <circle cx="40" cy="40" r="25" fill="none" stroke="url(#gradient1)" stroke-width="3">
+                                <animateTransform attributeName="transform" type="rotate" from="0 40 40" to="360 40 40" dur="3s" repeatCount="indefinite"/>
+                            </circle>
+                            <path d="M 40 20 L 40 30 M 40 50 L 40 60 M 20 40 L 30 40 M 50 40 L 60 40" stroke="#00c8ff" stroke-width="3" stroke-linecap="round">
+                                <animateTransform attributeName="transform" type="rotate" from="0 40 40" to="360 40 40" dur="2s" repeatCount="indefinite"/>
+                            </path>
+                            <defs>
+                                <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#00c8ff;stop-opacity:1" />
+                                    <stop offset="100%" style="stop-color:#0066ff;stop-opacity:1" />
+                                </linearGradient>
+                            </defs>
+                        </svg>
+                    </div>
+                </div>
+                
+                <!-- Title -->
+                <div style="font-size: 32px; font-weight: 700; font-family: 'Orbitron', Arial, sans-serif; background: linear-gradient(135deg, #00c8ff 0%, #0099ff 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 10px; letter-spacing: 2px;">
+                    RUIE
+                </div>
+                
+                <!-- Subtitle -->
+                <div style="font-size: 14px; color: #8899aa; font-family: Arial, sans-serif; margin-bottom: 30px; letter-spacing: 3px; text-transform: uppercase;">
+                    RSI UI Editor
+                </div>
+                
+                <!-- Progress Bar Container -->
+                <div style="position: relative; width: 100%; height: 4px; background: rgba(0, 200, 255, 0.1); border-radius: 2px; overflow: hidden; margin-bottom: 20px;">
+                    <!-- Animated progress bar -->
+                    <div id="loading-progress-bar" style="position: absolute; left: 0; top: 0; height: 100%; background: linear-gradient(90deg, #00c8ff 0%, #0099ff 50%, #00c8ff 100%); background-size: 200% 100%; border-radius: 2px; width: 0%; transition: width 0.3s ease; animation: shimmer 2s infinite;">
+                    </div>
+                </div>
+                
+                <!-- Status Text -->
+                <div id="loading-status" style="font-size: 13px; color: #6688aa; font-family: Arial, sans-serif; min-height: 20px; letter-spacing: 0.5px;">
+                    Initializing...
+                </div>
+                
+                <!-- Version/Build Info -->
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid rgba(0, 200, 255, 0.1); font-size: 11px; color: #556677; font-family: Arial, sans-serif;">
+                    v0.2 Alpha • Star Citizen Launcher Theme Editor
+                </div>
+            </div>
+        </div>
+        
+        <!-- CSS Animations -->
+        <style>
+            @keyframes shimmer {
+                0% { background-position: 200% 0; }
+                100% { background-position: -200% 0; }
             }
-        } catch (err) {
-            console.error('[INLINE] Error calling startApp:', err?.message || String(err));
+            @keyframes twinkle {
+                0%, 100% { opacity: 0.3; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.5); }
+            }
+        </style>
+    </div>
+    
+    <script>
+    // Inline initialization script - run only once
+    console.log('[INLINE] Script starting...');
+    
+    // Prevent multiple initializations
+    if (window.initializationStarted) {
+        console.log('[INLINE] Already initialized, skipping');
+    } else {
+        window.initializationStarted = true;
+        
+        const loadingStatus = document.getElementById('loading-status');
+        const progressBar = document.getElementById('loading-progress-bar');
+        let currentProgress = 0;
+        
+        function updateLoadingStatus(msg, progress) {
+            if (loadingStatus) loadingStatus.textContent = msg;
+            if (progressBar && progress !== undefined) {
+                currentProgress = progress;
+                progressBar.style.width = progress + '%';
+            }
+            console.log('[LOADING]', msg, progress !== undefined ? `(${progress}%)` : '');
+        }
+        
+        updateLoadingStatus('Initializing system...', 0);
+        
+        function hideLoadingScreen() {
+            const loader = document.getElementById('app-loading');
+            if (loader) {
+                loader.style.opacity = '0';
+                loader.style.transition = 'opacity 0.3s';
+                setTimeout(() => loader.remove(), 300);
+            }
+        }
+        
+        function tryStartApp() {
+            // Double-check we haven't started already
+            if (window.appStarted) {
+                console.log('[INLINE] App already started');
+                return;
+            }
+            
+            try {
+                updateLoadingStatus('Loading core systems...', 20);
+                console.log('[INLINE] tryStartApp called, typeof startApp:', typeof startApp);
+                if (typeof startApp === 'function') {
+                    console.log('[INLINE] Calling startApp()');
+                    updateLoadingStatus('Starting application...', 40);
+                    
+                    const result = startApp();
+                    if (result && typeof result.then === 'function') {
+                        // Simulate progress while app loads
+                        setTimeout(() => updateLoadingStatus('Initializing interface...', 60), 200);
+                        setTimeout(() => updateLoadingStatus('Loading resources...', 80), 400);
+                        
+                        result.then(() => {
+                            updateLoadingStatus('Ready!', 100);
+                            setTimeout(hideLoadingScreen, 500);
+                        }).catch(function(err) {
+                            console.error('[INLINE] startApp error:', err?.message || String(err));
+                            console.error('[INLINE] Stack:', err?.stack);
+                            updateLoadingStatus('⚠ Error: ' + (err?.message || String(err)), 100);
+                            progressBar.style.background = 'linear-gradient(90deg, #ff4444 0%, #ff0000 50%, #ff4444 100%)';
+                            // Show error on page but don't reload
+                            setTimeout(() => {
+                                const errorDiv = document.createElement('div');
+                                errorDiv.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);max-width:600px;background:rgba(255,68,68,0.95);color:white;padding:20px 30px;z-index:999999;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);';
+                                errorDiv.innerHTML = '<h3 style="margin:0 0 10px 0;font-family:Orbitron,Arial,sans-serif;">⚠ Startup Error</h3><pre style="white-space:pre-wrap;font-size:12px;margin:0;font-family:monospace;background:rgba(0,0,0,0.2);padding:10px;border-radius:5px;max-height:300px;overflow:auto;">' + (err?.stack || err?.message || String(err)) + '</pre>';
+                                document.body.appendChild(errorDiv);
+                            }, 1000);
+                        });
+                    }
+                } else {
+                    console.error('[INLINE] startApp not found or not a function');
+                    updateLoadingStatus('⚠ Error: Core system not found', 50);
+                }
+            } catch (err) {
+                console.error('[INLINE] Error calling startApp:', err?.message || String(err));
+                console.error('[INLINE] Stack:', err?.stack);
+                updateLoadingStatus('⚠ Critical error: ' + (err?.message || String(err)), 100);
+            }
+        }
+        
+        // Only use DOMContentLoaded - most reliable
+        console.log('[INLINE] Setting up DOMContentLoaded listener');
+        updateLoadingStatus('Loading modules...', 10);
+        
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() {
+                console.log('[INLINE] DOMContentLoaded fired');
+                updateLoadingStatus('DOM ready...', 15);
+                setTimeout(tryStartApp, 100);
+            });
+        } else {
+            // DOM already loaded
+            console.log('[INLINE] DOM already ready');
+            updateLoadingStatus('DOM ready...', 15);
+            setTimeout(tryStartApp, 100);
         }
     }
-    
-    // Try immediately
-    tryStartApp();
-    
-    // Also try on DOMContentLoaded
-    document.addEventListener('DOMContentLoaded', tryStartApp);
-    
-    // Also try after a delay
-    setTimeout(tryStartApp, 1000);
     </script>
     
     <div class="container">
@@ -73,9 +220,9 @@
                             <div id="path-tooltip" style="display: none; position: absolute; bottom: -30px; left: 0; background: #1a1a2e; border: 1px solid #64c864; padding: 5px 10px; border-radius: 4px; font-size: 0.85em; white-space: nowrap; z-index: 1000;"></div>
                         </div>
                         <div style="display: flex; gap: 10px;">
-                            <button id="browse-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="browseForAsar()">📁 Browse</button>
-                            <button id="detect-launcher-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="detectLauncher()">🔍 Auto-Detect</button>
-                            <button id="init-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="initSession()">Initialize</button>
+                            <button id="browse-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;">📁 Browse</button>
+                            <button id="detect-launcher-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;">🔍 Auto-Detect</button>
+                            <button id="init-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;">Initialize</button>
                         </div>
                     </div>
                     <div id="init-status" class="status"></div>
@@ -92,7 +239,7 @@
                         <p style="color: #a0b0c0; font-size: 0.9em; margin-bottom: 15px;">Extract and manage ASAR versions.</p>
                         
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="extractAsar()">Decompile app.asar</button>
+                            <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;">Decompile app.asar</button>
                             <button id="open-latest-extract-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
                             <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Folder</button>
                         </div>
@@ -120,6 +267,8 @@
                             <button id="create-backup-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
                             <button id="open-backups-folder-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open Folder</button>
                         </div>
+                        
+                        <div id="backups-status" class="status"></div>
 
                         <h4 style="color: #8db4d0; margin: 15px 0 10px 0; font-size: 0.95em;">Existing Backups</h4>
                         <div id="backupsList" class="backups-list">

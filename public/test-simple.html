@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>RUIE Test</title>
+    <style>
+        body { 
+            background: #0a0e27; 
+            color: white; 
+            font-family: Arial;
+            padding: 20px;
+        }
+        .test { 
+            border: 2px solid red; 
+            padding: 20px; 
+            margin: 20px;
+            background: #1a1a2e;
+        }
+    </style>
+</head>
+<body>
+    <h1>RUIE Simple Test Page</h1>
+    <div class="test">
+        <h2>✓ HTML is loading</h2>
+        <p>If you see this, the server is working.</p>
+    </div>
+    
+    <div class="test">
+        <h2>Testing CSS</h2>
+        <p style="color: #00ff00;">This text should be green</p>
+    </div>
+    
+    <div class="test">
+        <h2>Testing JavaScript</h2>
+        <p id="js-test">JavaScript not loaded yet...</p>
+    </div>
+    
+    <script>
+        document.getElementById('js-test').textContent = '✓ JavaScript is working!';
+        document.getElementById('js-test').style.color = '#00ff00';
+    </script>
+    
+    <div class="test">
+        <a href="/" style="color: #00c8ff; text-decoration: underline;">← Back to main app</a>
+    </div>
+</body>
+</html>

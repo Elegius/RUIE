@@ -1165,7 +1165,11 @@ def _parse_music_files_from_main(main_js_path):
 @app.route('/')
 def serve_index():
     """Serve the main index.html file."""
-    return send_from_directory('public', 'index.html')
+    response = send_from_directory('public', 'index.html')
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 
 @app.route('/api/default-music', methods=['GET'])
@@ -1562,9 +1566,15 @@ def api_init():
                 'launcher': launcher_info
             })
         else:
+            # Detection failed - provide helpful guidance
+            error_msg = (
+                'RSI Launcher not found in standard locations. '
+                'Please ensure it is installed and try clicking "Browse" to manually locate app.asar'
+            )
+            print('[API] Launcher detection failed - returning 404')
             return jsonify({
                 'success': False,
-                'error': 'RSI Launcher not found'
+                'error': error_msg
             }), 404
     except Exception as e:
         import traceback
@@ -1572,14 +1582,16 @@ def api_init():
         print(f'[API Error] {str(e)}')
         return jsonify({
             'success': False,
-            'error': 'An error occurred during initialization. Please try again.'
+            'error': f'Detection error: {str(e)}'
         }), 500
 
 @app.route('/api/detect-launcher', methods=['GET', 'POST'])
 def api_detect_launcher():
-    """Alias for /api/init"""
-    print("[SERVER] /api/detect-launcher endpoint called")
-    return api_init()
+    """Alias for /api/init - auto-detect launcher"""
+    print("[SERVER] /api/detect-launcher endpoint called - attempting auto-detection...")
+    result = api_init()
+    print(f"[SERVER] Auto-detection result: {result}")
+    return result
 
 @app.route('/api/launcher-status', methods=['GET', 'POST'])
 def api_launcher_status():
@@ -1672,30 +1684,66 @@ def api_browse_for_asar():
         import tkinter as tk
         from tkinter import filedialog
         
-        # Create a hidden root window
-        root = tk.Tk()
-        root.withdraw()  # Hide the window
-        root.attributes('-topmost', True)  # Bring to front
-        
-        # Open file picker
-        file_path = filedialog.askopenfilename(
-            title="Select app.asar file",
-            filetypes=[("ASAR files", "*.asar"), ("All files", "*.*")],
-            initialdir=os.path.expanduser('~')
-        )
-        
-        root.destroy()
-        
-        if file_path:
-            return jsonify({
-                'success': True,
-                'path': file_path
-            })
-        else:
+        try:
+            # Try tkinter approach first (works on desktop)
+            root = tk.Tk()
+            root.withdraw()  # Hide the window
+            root.attributes('-topmost', True)  # Bring to front
+            
+            # Open file picker
+            file_path = filedialog.askopenfilename(
+                title="Select app.asar file",
+                filetypes=[("ASAR files", "*.asar"), ("All files", "*.*")],
+                initialdir=os.path.expanduser('~')
+            )
+            
+            root.destroy()
+            
+            if file_path:
+                print(f"[API] Browse selected: {file_path}")
+                return jsonify({
+                    'success': True,
+                    'path': file_path
+                })
+            else:
+                return jsonify({
+                    'success': False,
+                    'path': None,
+                    'message': 'No file selected'
+                })
+        except Exception as tk_error:
+            print(f"[API] Tkinter dialog failed: {tk_error}")
+            print("[API] Trying fallback method...")
+            
+            # Fallback: return common launcher paths for user to choose from
+            # This helps users find the file if dialogs don't work
+            launcher_detector = LauncherDetector()
+            launcher_paths = launcher_detector.get_launcher_paths()
+            
+            # Try to detect automatically
+            for path in launcher_paths:
+                if os.path.exists(path):
+                    asar_path = launcher_detector.find_asar(path)
+                    if asar_path and os.path.exists(asar_path):
+                        print(f"[API] Found via fallback detection: {asar_path}")
+                        return jsonify({
+                            'success': True,
+                            'path': asar_path,
+                            'message': 'Auto-detected launcher'
+                        })
+            
             return jsonify({
                 'success': False,
-                'path': None,
-                'message': 'No file selected'
+                'error': 'Could not open file picker. Please try using Auto-Detect button instead.'
+            }), 500
+            
+    except Exception as e:
+        import traceback
+        print(f"[API] Browse error: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': f'Error: {str(e)}'
             })
     except Exception as e:
         print(f"Error opening file picker: {e}")
@@ -3374,9 +3422,10 @@ def api_open_backups_folder():
         
         # Open folder in system explorer
         if sys.platform == 'win32':
-            subprocess.Popen(['explorer', '/select,', backups_dir])
+            # Use /root, to open the folder itself (not select an item inside it)
+            subprocess.Popen(['explorer', '/root,', backups_dir])
         elif sys.platform == 'darwin':  # macOS
-            subprocess.Popen(['open', '-R', backups_dir])
+            subprocess.Popen(['open', backups_dir])
         else:  # Linux
             subprocess.Popen(['xdg-open', backups_dir])
         
@@ -3400,9 +3449,10 @@ def api_open_extractions_folder():
         
         # Open folder in system explorer
         if sys.platform == 'win32':
-            subprocess.Popen(['explorer', '/select,', extractions_dir])
+            # Use /root, to open the folder itself (not select an item inside it)
+            subprocess.Popen(['explorer', '/root,', extractions_dir])
         elif sys.platform == 'darwin':  # macOS
-            subprocess.Popen(['open', '-R', extractions_dir])
+            subprocess.Popen(['open', extractions_dir])
         else:  # Linux
             subprocess.Popen(['xdg-open', extractions_dir])
         
