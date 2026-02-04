@@ -1,0 +1,72 @@
+{
+  "name": "ruie",
+  "version": "1.0.0",
+  "description": "RSI Launcher UI Editor - Desktop Application",
+  "main": "electron/src/main.js",
+  "author": "Elegius",
+  "license": "MIT",
+  "homepage": "./",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --development",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win --publish never",
+    "build:win-portable": "electron-builder --win portable --publish never",
+    "pack": "electron-builder --dir",
+    "prestart": "npm run ensure-python-server",
+    "ensure-python-server": "node electron/scripts/check-server.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "electron-is-dev": "^2.0.0"
+  },
+  "devDependencies": {
+    "electron": "^29.0.0",
+    "electron-builder": "^24.6.0"
+  },
+  "build": {
+    "appId": "com.elegius.ruie",
+    "productName": "RUIE",
+    "directories": {
+      "buildResources": "assets"
+    },
+    "files": [
+      "electron/src/**/*",
+      "public/**/*",
+      "server.py",
+      "requirements.txt",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "certificateFile": null,
+      "certificatePassword": null,
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
+      "sign": "./customSign.js",
+      "rfc3161TimeStampServer": "http://timestamp.comodoca.com"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "RUIE"
+    }
+  }
+}
