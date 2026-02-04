@@ -3,7 +3,7 @@
 Custom launcher theme editor for Roberts Space Industries Launcher. Change colors, add media, and personalize your launcher.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue)](https://www.python.org/)
-[![PyQt5](https://img.shields.io/badge/PyQt5-✓-green)](https://pypi.org/project/PyQt5/)
+[![Electron](https://img.shields.io/badge/Electron-29.0.0-blue)](https://www.electronjs.org/)
 [![Flask](https://img.shields.io/badge/Flask-✓-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![CodeQL](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql)
@@ -18,10 +18,12 @@ Custom launcher theme editor for Roberts Space Industries Launcher. Change color
 - 💾 Backup and restore themes
 
 🎯 **User Experience**
-- 6-step wizard with live preview
-- 17 manufacturer presets
+- 5-step wizard with live preview
+- 17 manufacturer presets with color grid layout
 - Auto-detect RSI Launcher installation
 - Backup and restore system
+- Loading screen with detailed progress feedback
+- Browser cache auto-clears on exit for fresh loads
 
 🔒 **Security**
 - XSS protection (sanitized HTML)
@@ -33,19 +35,20 @@ Custom launcher theme editor for Roberts Space Industries Launcher. Change color
 
 ### Option 1: Portable Executable (Recommended)
 ```powershell
-# Download RUIE.exe and run
+# Download RUIE Setup.exe or RUIE.exe and run
 RUIE.exe
 ```
-No installation needed. Works offline. ~6 MB file.
+No Python installation needed. Works offline.
 
 ### Option 2: From Source
 ```powershell
 git clone https://github.com/Elegius/RUIE.git
 cd RUIE
+npm install
 pip install -r requirements.txt
-python launcher.py
+npm start
 ```
-Requires: Python 3.11+, Windows 10/11
+Requires: Node.js 16+, Python 3.11+, Windows 10/11
 
 ## Documentation
 
@@ -60,58 +63,58 @@ Requires: Python 3.11+, Windows 10/11
 | Requirement | Version |
 |-------------|---------|
 | Windows | 10 or 11 |
+| Node.js | 16+ (only for source mode) |
 | Python | 3.11+ (only for source mode) |
 | Memory | 256 MB minimum |
 | Disk Space | ~500 MB for RSI Launcher |
 
 ## How to Use
 
-1. **Launch the app**
+1. **Launch the app**npm start
    - Run `RUIE.exe` (portable) or `python launcher.py` (source)
    
-2. **Step 1: Detect Launcher**
+2. **Step 1: Detect & Extract Launcher**
    - App auto-detects RSI Launcher installation
-   - Select custom path if needed
+   - Extract and decompile app.asar files
+   - Manage multiple extractions
 
-3. **Step 2: Extract & Backup**
-   - Extract launcher theme from app.asar
-   - Creates automatic backup
-
-4. **Step 3: Select Preset or Customize**
-   - Choose from 17 manufacturer presets, or
+3. **Step 2: Customize Colors**
+   - Choose from 17 manufacturer presets (displayed in compact grid), or
    - Pick custom colors from color picker
+   - Live preview shows changes in real-time
 
-5. **Step 4: Preview Changes**
-   - Live preview shows how launcher will look
-   - Adjust colors as needed
+4. **Step 3: Replace Media Files**
+   - Upload custom images, videos, and backgrounds
+   - Preview media before applying
 
-6. **Step 5: Apply & Test**
-   - Apply changes to launcher
-   - Restart RSI Launcher to see changes
+5. **Step 4: Customize Music**
+   - Add custom music tracks
+   - Configure audio playback
 
-7. **Step 6: Backup & Restore**
-   - Manage theme backups
-   - Restore previous themes anytime
+6. **Step 5: Test, Export & Install**
+   - **Test**: Launch modified launcher to preview theme
+   - **Export**: Download theme configuration as JSON
+   - **Install**: Apply theme to actual launcher (automatic backup created)
 
 ## Deployment Options
 
-### Portable EXE (5.99 MB)
+### Portable Executable
 - No installation required
 - Works from USB drive
-- All dependencies included
+- All dependencies bundled
 - Single executable file
 - **Download**: Get latest from [Releases](https://github.com/Elegius/RUIE/releases)
 
-### Windows Installer
+### Windows Installer (NSIS)
 - Professional setup wizard
 - Start menu integration
 - Uninstall support
-- Recommended for corporate deployment
+- Recommended for standard installation
 
 ### Source Code
 - Full transparency
 - Ideal for developers
-- Requires Python 3.11+
+- Requires Node.js 16+ and Python 3.11+
 - Build your own executable
 
 ## Project Status
@@ -135,7 +138,7 @@ Requires: Python 3.11+, Windows 10/11
 ### App won't start
 - ✅ Run as Administrator
 - ✅ Check Windows Defender/Antivirus (may require allowlist)
-- ✅ Verify Python 3.11+ installed (source mode only)
+- ✅ Verify Node.js 16+ and Python 3.11+ installed (source mode only)
 
 ### Can't detect launcher
 - ✅ Ensure RSI Launcher is installed (Star Citizen)
@@ -153,18 +156,29 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for troubleshooting advanced issues.
 
 ```
 RUIE
-├── launcher.py              # PyQt5 desktop window + Flask server
-├── server.py                # REST API (44 endpoints)
+├── electron/
+│   └── src/
+│       ├── main.js          # Electron main process (spawns Flask)
+│       └── preload.js       # IPC bridge for security
+├── server.py                # Flask REST API (46 endpoints)
 ├── launcher_detector.py      # Auto-detect installations
 ├── color_replacer.py         # Color replacement engine
 ├── media_replacer.py         # Media file handler
 ├── asar_extractor.py         # ASAR archive extraction
 ├── public/
-│   ├── app.js               # Single-page app (6-step wizard)
+│   ├── app.js               # Single-page app (5-step wizard)
 │   ├── index.html           # HTML template
-│   └── styles-modern.css    # CSS styling
-└── setup.iss                # Windows installer config
+│   └── styles.css           # CSS styling
+├── package.json             # Node.js configuration
+└── requirements.txt         # Python dependencies
 ```
+
+**Architecture Flow:**
+1. Electron (main.js) spawns Python Flask server
+2. Flask serves REST API on localhost:5000
+3. Electron window loads web UI from Flask
+4. JavaScript app communicates with Flask API
+5. Python backend handles file operations
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for complete architecture documentation.
 
@@ -173,18 +187,23 @@ See [DEVELOPMENT.md](DEVELOPMENT.md) for complete architecture documentation.
 RUIE includes comprehensive security controls:
 - ✅ XSS protection (HTML sanitization)
 - ✅ Path traversal prevention
-- ✅ Input validation on all endpoints
-- ✅ CSRF tokens for state changes
-- ✅ Debug mode disabled in production
-- ✅ CORS restricted to localhost
-- ✅ File upload validation
-- ✅ Process isolation
+- ✅ Development Mode
+```powershell
+npm install
+pip install -r requirements.txt
+npm start
+```
 
-See [SECURITY.md](SECURITY.md) for detailed security documentation.
+### Create Windows Installer
+```powershell
+npm run build:win
+# Output: dist/RUIE Setup 1.0.0.exe
+```
 
-## Building from Source
-
-### Create Portable EXE
+### Create Portable Executable
+```powershell
+npm run build:win-portable
+# Output: dist/RUIE 1.0.0.exe
 ```powershell
 pip install pyinstaller
 pyinstaller RUIE.spec -y
@@ -200,11 +219,11 @@ iscc setup.iss
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for complete build instructions.
 
-## License
-
-MIT License - See [LICENSE](LICENSE) for details
-
-## Disclaimer
+## LElectron** - Desktop application framework
+- **Python** - Backend language
+- **Flask** - REST API server
+- **Node.js** - JavaScript runtime
+- **electron-builder** - Application packag
 
 ⚠️ **RUIE is a fan-made, community project.** It is not affiliated with, endorsed by, or associated with Cloud Imperium Games, Roberts Space Industries, or Star Citizen.
 

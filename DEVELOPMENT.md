@@ -4,25 +4,25 @@
 
 ## Architecture Overview
 
-RUIE uses a hybrid architecture combining desktop and web technologies:
+RUIE uses a hybrid architecture combining Electron and Python:
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │           User System (Windows 10/11)                │
 └─────────────────────────────────────────────────────┘
               │
-              ├─ RUIE.exe (Portable, 5.99 MB)
-              └─ launcher.py (Source mode)
+              ├─ RUIE.exe (Electron app)
+              └─ npm start (Development mode)
                       │
     ┌───────────────────┴─────────────────┐
     │                                       │
 ┌─────────────────────────┐      ┌──────────────────┐
-│  PyQt5 Desktop Window    │      │  Flask Server    │
-│  (Native Windows UI)     │      │  (HTTP REST API) │
-│  - Window management     │      │  - 44 endpoints  │
-│  - Event handling        │◄────►│  - File I/O      │
+│  Electron Main Process   │      │  Flask Server    │
+│  (Native Desktop Window) │      │  (HTTP REST API) │
+│  - Window management     │      │  - 46 endpoints  │
+│  - Spawns Flask server   │◄────►│  - File I/O      │
 │  - Admin elevation       │      │  - Business logic│
-│  - Server lifecycle      │      │  - Error handling│
+│  - IPC bridge            │      │  - Error handling│
 └─────────────────────────┘      └──────────────────┘
     │                                       │
     │                    ┌──────────────────┘
@@ -43,19 +43,18 @@ RUIE uses a hybrid architecture combining desktop and web technologies:
 
 ### Execution Modes
 
-**Portable Mode** (EXE)
-- Frozen with PyInstaller
+**Production Mode** (Built Executable)
+- Electron app packaged with electron-builder
+- Flask server runs as spawned Python process
 - All dependencies bundled
-- Flask runs in daemon thread
-- No reload on file change
-- No Python installation needed
+- No Node.js/Python installation needed
 
-**Source Mode** (Development)
-- Run with `python launcher.py`
-- Flask runs as subprocess
-- Auto-reload enabled for debugging
+**Development Mode**
+- Run with `npm start`
+- Electron spawns Flask automatically
+- Hot-reload enabled for frontend
 - Full access to source code
-- Python 3.11+ required
+- Requires Node.js 16+ and Python 3.11+
 
 ---
 
@@ -63,33 +62,34 @@ RUIE uses a hybrid architecture combining desktop and web technologies:
 
 ```
 RUIE/
-├── launcher.py              # PyQt5 desktop app entry point
-├── server.py                # Flask REST API (44 endpoints)
-├── launcher_detector.py      # Auto-detect RSI Launcher
-├── color_replacer.py         # Color replacement engine
-├── media_replacer.py         # Media file handler
-├── asar_extractor.py         # ASAR archive extraction
-├── run_production.py         # Waitress production server
+├── electron/                    # Electron desktop app
+│   ├── src/
+│   │   ├── main.js             # Main process (spawns Flask)
+│   │   └── preload.js          # IPC security bridge
+│   └── scripts/
+│       └── check-server.js     # Server validation
 │
-├── public/                   # Web UI assets
-│   ├── app.js               # Single-page app (6-step wizard)
-│   ├── index.html           # Main HTML page
-│   ├── preview.html         # Live preview template
-│   ├── styles-modern.css    # Primary stylesheet
-│   ├── styles.css           # Additional styles
-│   ├── assets/              # Images, logos, videos
-│   └── presets/             # Color mapping JSON files
+├── server.py                    # Flask REST API (46 endpoints)
+├── launcher_detector.py         # Auto-detect RSI Launcher
+├── color_replacer.py            # Color replacement engine
+├── media_replacer.py            # Media file handler
+├── asar_extractor.py            # ASAR archive extraction
 │
-├── build/                   # PyInstaller build output
-│   └── RUIE.spec           # PyInstaller specification
+├── public/                      # Web UI assets
+│   ├── app.js                  # Single-page app (5-step wizard)
+│   ├── index.html              # Main HTML page
+│   ├── preview.html            # Live preview template
+│   ├── styles.css              # Primary stylesheet
+│   ├── assets/                 # Images, logos, videos
+│   └── presets/                # Color mapping JSON files (17 manufacturers)
 │
-├── dist/                    # Distribution output
-│   └── RUIE/
-│       ├── RUIE.exe         # Portable executable
-│       └── _internal/       # Bundled dependencies
+├── dist/                        # electron-builder output
+│   ├── RUIE Setup 1.0.0.exe   # Installer
+│   └── RUIE 1.0.0.exe         # Portable
 │
-├── requirements.txt         # Python dependencies
-├── setup.iss               # Windows installer config
+├── node_modules/                # Node.js dependencies
+├── package.json                 # Node.js configuration
+├── requirements.txt             # Python dependencies
 └── [documentation files]
 ```
 
@@ -97,49 +97,42 @@ RUIE/
 
 ## Core Modules
 
-### launcher.py - Desktop Application
+### electron/src/main.js - Electron Main Process
 
-**Purpose**: Main PyQt5 desktop window and application lifecycle management
-
-**Key Classes**
-```python
-class LauncherApp(QMainWindow):
-    """PyQt5 main window"""
-    
-class DebugWindow(QMainWindow):
-    """Separate debug console window"""
-```
+**Purpose**: Desktop application entry point and Flask server lifecycle
 
 **Key Functions**
-```python
-def is_frozen()              # Check if running as EXE
-def request_admin()          # Request Windows admin privileges
-def start_server()           # Start Flask (thread or subprocess)
-def load_ui()                # Load web UI into QWebEngineView
-def get_resource_path(path)  # Get path to bundled resources
+```javascript
+function startFlaskServer()         # Spawn Python Flask server
+function checkFlaskHealth()         # Health check Flask API
+function waitForFlaskServer()       # Wait for server ready
+function isRunningAsAdminWindows()  # Check admin privileges
+function relaunchAsAdminWindows()   # Request UAC elevation
+function createWindow()             # Create Electron window
 ```
 
 **Key Features**
-- Admin privilege elevation via UAC
-- Dual-mode Flask server startup
-- WebEngine for web UI display
-- Debug console window
+- Spawns Flask server as child process
+- Admin privilege elevation via PowerShell
+- Health check polling for Flask readiness
+- IPC bridge for secure communication
 - Graceful shutdown handling
+- Development vs production mode detection
 
-**Entry Points**
-```python
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    window = LauncherApp()
-    window.show()
-    sys.exit(app.exec_())
+**Entry Point**
+```javascript
+app.whenReady().then(async () => {
+    await startFlaskServer();
+    await waitForFlaskServer();
+    createWindow();
+});
 ```
 
 ---
 
 ### server.py - Flask REST API
 
-**Purpose**: Backend REST API with 44 endpoints for all operations
+**Purpose**: Backend REST API with 46 endpoints for all operations
 
 **Key Classes**
 ```python
@@ -163,14 +156,15 @@ GET  /api/detect-launcher           Auto-detect RSI Launcher
 POST /api/detect-launcher           Set custom launcher path
 ```
 
-**ASAR Operations** (6 endpoints)
+**ASAR Operations** (7 endpoints)
 ```
 POST /api/extract                   Extract app.asar
 POST /api/repack                    Repack modified ASAR
 POST /api/compile-asar              Compile without installing
-POST /api/install-asar              Compile and install
+POST /api/install-asar              Compile and install (requires extractedPath)
 GET  /api/extracted-list            List previous extractions
 POST /api/use-extract               Load previous extraction
+POST /api/delete-extract            Delete extraction folder
 ```
 
 **Color Modifications** (4 endpoints)
@@ -200,9 +194,9 @@ POST /api/delete-backup             Delete backup
 GET  /api/backup-info               Get backup metadata
 ```
 
-**Testing & Deployment** (8 endpoints)
+**Testing & Deployment** (9 endpoints)
 ```
-POST /api/test-launcher             Test with temp ASAR
+POST /api/test-launcher             Test with temp ASAR (requires extractedPath)
 POST /api/deploy-theme              Deploy theme permanently
 GET  /api/test-status               Check test status
 POST /api/test-rollback             Rollback test
@@ -210,6 +204,8 @@ GET  /api/extraction-changes        Detect changes
 POST /api/validate-extraction       Validate extraction
 POST /api/check-compatibility       Check launcher version
 POST /api/clear-session             Clear all extractions
+POST /api/open-extractions-folder   Open extractions directory
+POST /api/open-backups-folder       Open backups directory
 ```
 
 **Asset Routes** (8 endpoints)
@@ -402,55 +398,179 @@ Response:
 
 ### app.js - Single-Page Application
 
-**Purpose**: 6-step customization wizard interface
+**Purpose**: 5-step customization wizard interface
 
 **Key Components**
 ```javascript
 // Step navigation
-currentStep                 // Track current step
-navigateToPage(step)        // Navigate to step
-validateStep()              // Validate before next
+currentPage                 // Track current step (1-5)
+navigateToPage(step)        // Navigate between steps
+state.extractedPath         // Currently loaded extraction path
 
 // Color management
-updateColorPreview()        // Update preview colors
+collectColorMappings()      // Collect from manual and preset grids
 applyColors()              // Send colors to API
-escapeHtml()               // Sanitize user input
+renderColorSections()       // Render color grid layout
+selectColorForEditing()     // Open color editor
 
 // Media management
 updateMediaPreview()        // Update media preview
 applyMedia()               // Send media to API
-selectPreset()             // Load preset colors
 
 // Backup/Restore
 createBackup()             // Save current state
 restoreBackup()            // Load previous state
 deleteBackup()             // Remove backup
+loadBackupsList()          // Real-time backup list
+
+// Extraction management
+loadExtractedASARList()    // Load extraction list
+useSelectedExtract()       // Load previous extraction
+deleteExtractedASAR()      // Remove extraction
+
+// Cache management
+setupCacheClearingOnExit() // Clear localStorage, sessionStorage, IndexedDB on exit
+
+// Loading screen
+updateLoadingStatus()      // Update progress bar and status text
+hideLoadingScreen()        // Hide loading screen after initialization
 
 // Utility functions
-formatFileSize()           // Human-readable sizes
-getAssetPath()             // Resolve asset paths
-showNotification()         // User feedback
+formatFileSize()           # Human-readable sizes
+showStatus()               # User feedback
+fetchAPI()                 # API wrapper
 ```
 
 **Wizard Steps**
-1. **Initialize** - Session setup, launcher detection
-2. **Extract** - Extract app.asar and backup
-3. **Colors** - Select or customize colors
-4. **Media** - Replace images, videos, music
-5. **Music** - Configure audio playback
-6. **Finalize** - Review and apply changes
+1. **Prepare & Extract** - Launcher detection, ASAR extraction, backup/extraction management
+2. **Customize Colors** - 17 manufacturer presets in grid layout, manual color mapping, live preview
+3. **Replace Media** - Images, videos, backgrounds with validation
+4. **Customize Music** - Audio playback configuration
+5. **Test, Export & Install** - 3 action cards: Test launcher, Export JSON, Install theme
 
 **State Management**
 ```javascript
 state = {
-  session: {},
-  launcher: {},
-  colors: {},
-  media: {},
-  backups: [],
-  errors: []
+  initialized: false,       // Whether ASAR has been extracted
+  extracted: false,         // Whether extract directory is available
+  colors: {},               // Current color selections
+  media: {},                // User-selected media files
+  music: [],                // Array of music files
+  config: {},               // Theme configuration
+  currentPage: 1,           // Current step (1-5)
+  selectedExtractPath: null,// Track selected extraction
+  extractedPath: null       // Currently loaded extraction path
 }
 ```
+
+---
+
+## UI Features & Implementation
+
+### Color Grid Layout
+
+**Implementation**: Step 2 displays color presets in a responsive CSS Grid
+
+**CSS Structure**
+```css
+.color-section-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 15px;
+    padding: 15px;
+}
+
+.color-grid-item {
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    background: rgba(22, 33, 62, 0.4);
+    border: 1px solid rgba(0, 200, 255, 0.3);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+```
+
+**Features**
+- Responsive grid adapts to panel width (40% of screen)
+- Minimum column width: 120px
+- Collapsible sections (Primary Colors, Neutral Colors, etc.)
+- Color editor opens inline when clicking color preview
+- Supports both preset and manual color mappings
+
+### Loading Screen with Progress
+
+**Implementation**: Inline script in index.html with progress tracking in app.js
+
+**Progress Stages** (25 status messages, 0%-100%)
+```
+5%  - DOM ready
+15% - Dependencies verified
+25% - Starting initialization
+26-34% - Loading presets
+45% - Launcher detection complete
+60% - Initialization complete
+62-68% - Loading backups
+74-80% - Loading extractions
+90% - All data loaded
+95% - Application ready
+100% - Ready!
+```
+
+**Key Functions**
+```javascript
+updateLoadingStatus(message, percentage)  // Update progress bar
+hideLoadingScreen()                       // Hide after init
+setupCacheClearingOnExit()               // Clear cache on close
+```
+
+**Timeout Safety**
+- 8-second timeout in promise chain
+- 10-second absolute timeout fallback
+- Ensures loading screen never hangs indefinitely
+
+### Cache Management
+
+**Auto-clearing on app exit**
+```javascript
+window.addEventListener('beforeunload', () => {
+    localStorage.clear();           // Clear local storage
+    sessionStorage.clear();         // Clear session storage
+    // Clear IndexedDB databases
+    // Clear service worker caches
+});
+```
+
+**Server-side cache control**
+```python
+@app.after_request
+def add_security_headers(response):
+    # Prevent caching of HTML/JS
+    if request.path.endswith(('.html', '.js')):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    return response
+```
+
+### Backup & Extraction Management
+
+**Real-time polling**
+```javascript
+// Poll every 2 seconds for updates
+setInterval(() => {
+    if (!backupsPollInFlight) {
+        loadBackupsList();
+    }
+}, 2000);
+```
+
+**Features**
+- List updates automatically as files change
+- Buttons below lists for "Open folder" actions
+- Delete buttons with confirmation dialogs
+- Metadata display (date, size, version)
 
 ---
 
@@ -465,46 +585,65 @@ PyQt5 5.15+
 Windows 10/11
 ```
 
-### Create Portable EXE
+Node.js 16+
+Python 3.11+
+Electron 29.0.0
+electron-builder 24.6.0
+Flask 2.3+
+Windows 10/11
+```
 
-**Step 1: Install dependencies**
+### Development Mode
+
+**Install dependencies**
 ```powershell
+npm install
 pip install -r requirements.txt
-pip install pyinstaller
 ```
 
-**Step 2: Build with PyInstaller**
+**Run development server**
 ```powershell
-pyinstaller RUIE.spec -y
+npm start
 ```
 
-**Output**: `dist/RUIE/RUIE.exe` (5.99 MB)
+This will:
+1. Spawn Flask server on localhost:5000
+2. Open Electron window
+3. Load UI with hot-reload
+4. Open DevTools (F12)
 
-**Command-line options**
-```
--y              # Overwrite output without asking
---distpath dist # Output directory
---buildpath build # Build directory
--F              # One-file bundle (slower to unpack)
--D              # One-folder bundle (current, faster)
-```
+### Build Windows Installer
 
-### Create Windows Installer
-
-**Step 1: Install Inno Setup 6**
-```
-https://jrsoftware.org/isdl.php
-```
-
-**Step 2: Build installer**
 ```powershell
-iscc setup.iss
+npm run build:win
 ```
 
-**Output**: `RUIE-Setup.exe` (~50 MB)
+**Output**: `dist/RUIE Setup 1.0.0.exe` (NSIS installer)
 
-**Installer Features**
-- Professional wizard UI
+### Build Portable Executable
+
+```powershell
+npm run build:win-portable
+```
+
+**Output**: `dist/RUIE 1.0.0.exe` (Standalone portable)
+
+**electron-builder Configuration**
+```json
+{
+  "appId": "com.elegius.ruie",
+  "productName": "RUIE",
+  "files": [
+    "electron/src/**/*",
+    "public/**/*",
+    "server.py",
+    "requirements.txt"
+  ],
+  "win": {
+    "target": ["nsis", "portable"]
+  }
+}
+```l wizard UI
 - Start menu shortcuts
 - Registry integration
 - Uninstall support

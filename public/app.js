@@ -2006,22 +2006,19 @@ function renderColorMappings() {
                 category = 'accent';
             }
             
+            // Create the grid item directly (no wrapper needed)
             const item = document.createElement('div');
-            item.className = 'color-mapping-item' + (category ? ` color-${category}` : '');
+            item.className = 'color-grid-item';
             item.id = id;
             
-            // Build the item structure using DOM methods to prevent XSS
-            // Show category label for main colors
+            // Add category badge if applicable
             if (category) {
-                const catSpan = document.createElement('span');
-                catSpan.className = 'color-category';
-                catSpan.textContent = category.toUpperCase();
-                item.appendChild(catSpan);
+                const catBadge = document.createElement('div');
+                catBadge.className = 'color-category-badge';
+                catBadge.textContent = category.toUpperCase();
+                catBadge.style.cssText = 'font-size: 0.6em; color: #8db4d0; text-transform: uppercase; margin-bottom: 4px; letter-spacing: 0.5px;';
+                item.appendChild(catBadge);
             }
-            
-            // Create color grid item
-            const gridItem = document.createElement('div');
-            gridItem.className = 'color-grid-item';
             
             const label = document.createElement('div');
             label.className = 'color-label';
@@ -2033,9 +2030,8 @@ function renderColorMappings() {
             preview.onclick = () => selectColorForEditing(preview, id);
             preview.setAttribute('data-color-id', id);
             
-            gridItem.appendChild(label);
-            gridItem.appendChild(preview);
-            item.appendChild(gridItem);
+            item.appendChild(label);
+            item.appendChild(preview);
             
             // Create color editor section using innerHTML (no user input here)
             const editorDiv = document.createElement('div');
@@ -2169,7 +2165,7 @@ function toggleColorSection(sectionId) {
  * Pick color (opens color picker)
  */
 function pickColor(element) {
-    const item = element.closest('.color-mapping-item');
+    const item = element.closest('.color-mapping-item, .color-grid-item');
     const wheel = item?.querySelector('.color-wheel-hidden');
     if (wheel) {
         wheel.click();
@@ -2308,7 +2304,7 @@ function updateHexFromRGB(editor) {
 function openColorPicker(event) {
     event.preventDefault();
     const button = event.target;
-    const item = button.closest('.color-mapping-item');
+    const item = button.closest('.color-mapping-item, .color-grid-item');
     const wheel = item?.querySelector('.color-wheel-hidden');
     if (wheel) {
         wheel.click();
@@ -2316,15 +2312,27 @@ function openColorPicker(event) {
 }
 
 /**
- * Collect color mappings from UI
+ * Collect color mappings from UI (both manual and preset sections)
  */
 function collectColorMappings() {
     const colors = {};
-    const items = document.querySelectorAll('.color-mapping-item');
+    
+    // Collect from manual color mapping section
+    const manualItems = document.querySelectorAll('.color-mapping-item');
+    manualItems.forEach(item => {
+        const oldColor = item.querySelector('.old-color')?.value.trim();
+        const newColor = item.querySelector('.new-color')?.value.trim();
 
-    items.forEach(item => {
-        const oldColor = item.querySelector('.old-color').value.trim();
-        const newColor = item.querySelector('.new-color').value.trim();
+        if (oldColor && newColor) {
+            colors[oldColor] = newColor;
+        }
+    });
+    
+    // Collect from preset color grid sections
+    const gridItems = document.querySelectorAll('.color-grid-item');
+    gridItems.forEach(item => {
+        const oldColor = item.querySelector('.old-color')?.value.trim();
+        const newColor = item.querySelector('.new-color')?.value.trim();
 
         if (oldColor && newColor) {
             colors[oldColor] = newColor;
@@ -3917,8 +3925,22 @@ async function startApp() {
             // Now safe to load backups/extracts
             loadBackupsList().catch(e => console.warn('[startApp] Error loading backups:', e));
             if (window.updateLoadingStatus) window.updateLoadingStatus('Backups loaded, loading extracts...', 75);
-            loadExtractedASARList().catch(e => console.warn('[startApp] Error loading extracts:', e));
-            if (window.updateLoadingStatus) window.updateLoadingStatus('All data loaded, finalizing...', 90);
+            
+            // Wait for extracts to load, then update final progress
+            loadExtractedASARList()
+                .then(() => {
+                    if (window.updateLoadingStatus) window.updateLoadingStatus('All data loaded, finalizing...', 90);
+                    setTimeout(() => {
+                        if (window.updateLoadingStatus) window.updateLoadingStatus('Application ready!', 95);
+                    }, 200);
+                })
+                .catch(e => {
+                    console.warn('[startApp] Error loading extracts:', e);
+                    if (window.updateLoadingStatus) window.updateLoadingStatus('Data loaded, finalizing...', 90);
+                    setTimeout(() => {
+                        if (window.updateLoadingStatus) window.updateLoadingStatus('Application ready!', 95);
+                    }, 200);
+                });
         }).catch((err) => {
             appendDebug('Launcher detection timeout or error: ' + err.message);
             console.warn('[window.load] Launcher detection timeout, continuing:', err.message);
@@ -3926,8 +3948,22 @@ async function startApp() {
             // Still try to load lists anyway
             loadBackupsList().catch(e => console.warn('[startApp] Error loading backups after timeout:', e));
             if (window.updateLoadingStatus) window.updateLoadingStatus('Loading extracted data...', 75);
-            loadExtractedASARList().catch(e => console.warn('[startApp] Error loading extracts after timeout:', e));
-            if (window.updateLoadingStatus) window.updateLoadingStatus('Finalizing setup...', 90);
+            
+            // Wait for extracts to load, then update final progress
+            loadExtractedASARList()
+                .then(() => {
+                    if (window.updateLoadingStatus) window.updateLoadingStatus('Finalizing setup...', 90);
+                    setTimeout(() => {
+                        if (window.updateLoadingStatus) window.updateLoadingStatus('Application ready!', 95);
+                    }, 200);
+                })
+                .catch(e => {
+                    console.warn('[startApp] Error loading extracts after timeout:', e);
+                    if (window.updateLoadingStatus) window.updateLoadingStatus('Finalizing setup...', 90);
+                    setTimeout(() => {
+                        if (window.updateLoadingStatus) window.updateLoadingStatus('Application ready!', 95);
+                    }, 200);
+                });
         });
 
         // Start real-time polling for backups/extractions
@@ -4067,11 +4103,19 @@ async function testTheme() {
     btn.disabled = true;
     
     try {
+        // Check if we have an extracted path
+        if (!state.extractedPath) {
+            throw new Error('No extracted ASAR loaded. Please extract an ASAR in Step 1 first.');
+        }
+        
         showStatus('finalize-status', 'Starting launcher test...', 'info');
         
         const response = await fetch('/api/test-launcher', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                extractedPath: state.extractedPath
+            })
         });
         
         const data = await response.json();
@@ -4205,12 +4249,17 @@ async function installTheme() {
         
         showStatus('finalize-status', 'Installing to launcher (creating backup)...', 'info');
         
+        // Check if we have an extracted path
+        if (!state.extractedPath) {
+            throw new Error('No extracted ASAR loaded. Please extract an ASAR in Step 1 first.');
+        }
+        
         // Finally install
         const installResponse = await fetch('/api/install-asar', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                extractedPath: state.extractedDir
+                extractedPath: state.extractedPath
             })
         });
         

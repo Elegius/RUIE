@@ -312,7 +312,6 @@
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;">Decompile app.asar</button>
                             <button id="open-latest-extract-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
-                            <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Open decompiled asars folder</button>
                         </div>
 
                         <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
@@ -327,6 +326,10 @@
                                 Loading extractions...
                             </div>
                         </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Open decompiled asars folder</button>
+                        </div>
                     </div>
 
                     <!-- Right Column: Backup Manager -->
@@ -336,7 +339,6 @@
                         
                         <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px;">
                             <button id="create-backup-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
-                            <button id="open-backups-folder-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open backups folder</button>
                         </div>
                         
                         <div id="backups-status" class="status"></div>
@@ -346,6 +348,10 @@
                             <div class="backup-item-empty" style="text-align: center; padding: 20px; color: #7a8a9a;">
                                 No backups yet. Create one to get started.
                             </div>
+                        </div>
+
+                        <div style="display: flex; gap: 10px; margin-top: 15px;">
+                            <button id="open-backups-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open backups folder</button>
                         </div>
                     </div>
                 </div>

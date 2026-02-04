@@ -156,7 +156,7 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       sandbox: true
     },
-    icon: path.join(__dirname, '../../assets/logos/icon.ico')
+    icon: path.join(__dirname, '../../icon.ico')
   });
   
   console.log('[ELECTRON] BrowserWindow created, loading URL:', FLASK_URL);

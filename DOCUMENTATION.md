@@ -16,7 +16,7 @@ The RUIE project now uses a lean, professional documentation structure optimized
 - ✅ Quick start guide (2 options: EXE and source)
 - ✅ System requirements
 - ✅ Installation instructions
-- ✅ How to use (6-step workflow)
+- ✅ How to use (5-step workflow)
 - ✅ Deployment options (portable, installer, source)
 - ✅ Troubleshooting guide
 - ✅ Architecture diagram
@@ -47,13 +47,16 @@ The RUIE project now uses a lean, professional documentation structure optimized
 **Audience**: Developers, contributors
 
 **Contains**:
-- ✅ Architecture overview with diagram
-- ✅ Execution modes (portable vs source)
+- ✅ Architecture overview with Electron + Flask diagram
+- ✅ Execution modes (production vs development)
 - ✅ Project structure and file organization
-- ✅ Core module documentation (6 Python modules)
-- ✅ API documentation (44 endpoints)
-- ✅ Frontend architecture (app.js)
-- ✅ Building & deployment instructions
+- ✅ Core module documentation (Electron main.js, server.py, helpers)
+- ✅ API documentation (46 endpoints)
+- ✅ Frontend architecture (5-step wizard in app.js)
+- ✅ Color grid layout implementation
+- ✅ Loading screen and progress tracking
+- ✅ Cache management and browser storage
+- ✅ Building & deployment with electron-builder
 - ✅ Security implementation details
 - ✅ Testing information
 - ✅ Troubleshooting for developers

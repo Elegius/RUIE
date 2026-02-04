@@ -8,15 +8,55 @@ All notable changes to RUIE are documented here. The format is based on [Keep a 
 🔬 **Alpha Release** - Active Development  
 ✅ **Testing**: 21/21 tests passing  
 ✅ **Security**: Audited and secured
+✅ **Migration**: Migrated from PyQt5 to Electron
+
+### Major Changes
+- **Electron Migration**: Replaced PyQt5 with Electron for better performance and maintainability
+- **Build System**: electron-builder replaces PyInstaller (~3-5 min builds vs 5-10 min)
+- **Bundle Size**: Reduced from ~500MB to ~150-200MB
+- **Development**: Standard Electron DevTools and debugging
+- **No Overlays**: Chromium-native rendering eliminates PyQt5 overlay issues
 
 ### Added
+- 5-step wizard interface (consolidated from previous 6 steps)
+- Color grid layout in Step 2 (compact display of all color pickers)
+- Dedicated Step 5 with 3 action cards: Test, Export, Install
+- Loading screen with detailed progress updates (25 status messages)
+- Browser cache auto-clearing on app exit (localStorage, sessionStorage, IndexedDB)
+- Real-time backup and extraction list polling
 - `/api/compile-asar` - Compile modified app.asar without installing
 - `/api/install-asar` - Compile and install modified app.asar with backups
+- `/api/test-launcher` - Test theme with temporary ASAR replacement
+- `/api/open-extractions-folder` - Open extractions directory in file explorer
+- `/api/open-backups-folder` - Open backups directory in file explorer
 - Comprehensive security audit and vulnerability fixes
 - Full documentation comments (200+ points across 7 files)
 - Portable EXE build (5.99 MB via PyInstaller)
 - Windows Installer configuration (Inno Setup)
-- Complete API endpoint documentation (44 endpoints)
+- Complete API endpoint documentation (46 endpoints)
+
+### Improved
+- Step 1: Combined launcher detection, ASAR extraction, and backup/extraction management
+- Step 2: Color presets display in responsive grid (minmax 120px columns)
+- Step 2: Color sections are collapsible for better organization
+- Step 5: Clean 3-card interface for Test/Export/Install actions
+- Folder open buttons moved below backup/extraction lists for better UX
+- Loading screen shows initialization progress from 0% to 100%
+- Promise chaining for async operations ensures proper timing
+- Color collection now includes both manual and preset grid colors
+- 10 security controls verified and documented
+- Dual-mode server startup (thread vs subprocess)
+- Error handling in all endpoints
+- Admin privilege elevation
+- Auto-launcher detection
+
+### Fixed
+- Color grid now displays properly (removed nested wrapper structure)
+- Test launcher now sends required `extractedPath` parameter
+- Install theme now uses correct `state.extractedPath` variable
+- Async chaining ensures loading progress completes before hiding screen
+- Color mapping functions work with both manual and preset colors
+- Delete button functionality for backups and extractions
 
 ### Security Fixes
 - **XSS Protection**: Added HTML sanitization for all user input
@@ -24,13 +64,6 @@ All notable changes to RUIE are documented here. The format is based on [Keep a 
 - **Command Injection**: Replaced shell commands with safe argument lists
 - **CSRF Protection**: Added CSRF tokens for state changes
 - **Input Validation**: Comprehensive validation on all endpoints
-
-### Improved
-- 10 security controls verified and documented
-- Dual-mode server startup (thread vs subprocess)
-- Error handling in new endpoints
-- Admin privilege elevation
-- Auto-launcher detection
 
 ### Testing
 - ✅ Module imports (5/5)
@@ -54,14 +87,15 @@ All notable changes to RUIE are documented here. The format is based on [Keep a 
 ### Added
 - Initial 5-step wizard interface
 - Launcher auto-detection system
-- Color replacement engine
+- Color replacement engine with grid layout
 - Media file management
 - Backup and restore system
-- 17 manufacturer presets
-- 44 REST API endpoints
+- 17 manufacturer presets (Aegis, Anvil, Drake, RSI, etc.)
+- 46 REST API endpoints
 - Flask backend with security controls
 - PyQt5 desktop application
 - Responsive web UI with live preview
+- ASAR extraction and decompilation
 
 ### Fixed
 - Compiled EXE startup issues (frozen mode Flask handling)
@@ -69,19 +103,21 @@ All notable changes to RUIE are documented here. The format is based on [Keep a 
 - Event listener attachment on dynamically created elements
 
 ### Features
-- 6-step customization wizard
+- 5-step customization wizard
 - Real-time color preview
 - Music and audio support
 - Backup metadata tracking
 - Admin privilege elevation
 - Windows UAC support
+- Multiple extraction management
+- Collapsible color sections
 
 ### Technical Stack
-- **Backend**: Python 3.11+, Flask, Waitress
-- **Desktop**: PyQt5, PyQtWebEngine
+- **Desktop**: Electron 29.0.0
+- **Backend**: Python 3.11+, Flask
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
-- **Archive**: Pure Python ASAR extraction (no Node.js required)
-- **Build**: PyInstaller 6.18.0
+- **Archive**: Pure Python ASAR extraction (no Node.js required for extraction)
+- **Build**: electron-builder 24.6.0
 
 ### Limitations
 - Windows 10/11 only

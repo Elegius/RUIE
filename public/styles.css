@@ -1024,7 +1024,7 @@ body::before {
 .color-section-content {
     padding: 15px;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     gap: 15px;
 }
 
@@ -1064,12 +1064,12 @@ body::before {
 }
 
 .color-label {
-    font-size: 0.7em;
+    font-size: 0.65em;
     color: #a0b0c0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
     word-break: break-word;
-    line-height: 1.2;
+    line-height: 1.1;
     flex-wrap: wrap;
 }
 
