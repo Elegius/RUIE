@@ -1876,7 +1876,48 @@ def api_test_launcher():
                         'error': 'Refusing to launch untrusted executable path.'
                     }), 400
 
-                launcher_process = subprocess.Popen(launcher_exe)
+                def validate_launcher_exe_path(launcher_exe_path, asar_path_value):
+                    """
+                    Additional hardening for launcher executable path:
+                    - Require absolute path
+                    - Require it to reside under the expected resources/asar directory
+                    """
+                    if not launcher_exe_path:
+                        return False
+                    # Normalize paths
+                    launcher_exe_abs = os.path.abspath(launcher_exe_path)
+                    asar_dir = os.path.dirname(os.path.abspath(asar_path_value)) if asar_path_value else None
+                    if not asar_dir:
+                        return False
+                    # Ensure the launcher executable is within the same tree as the asar directory
+                    try:
+                        common = os.path.commonpath([launcher_exe_abs, asar_dir])
+                    except ValueError:
+                        # Different drives or invalid paths
+                        return False
+                    if common != asar_dir:
+                        return False
+                    # Finally, ensure it points to an existing file
+                    return os.path.isfile(launcher_exe_abs)
+
+                if not validate_launcher_exe_path(launcher_exe, asar_path):
+                    try:
+                        if os.path.exists(backup_asar):
+                            shutil.copy2(backup_asar, asar_path)
+                            os.remove(backup_asar)
+                    except Exception:
+                        print('[ThemeManager] Failed to restore backup after invalid launcher path detected')
+                    finally:
+                        try:
+                            os.remove(temp_asar)
+                        except OSError:
+                            pass
+                    return jsonify({
+                        'success': False,
+                        'error': 'Refusing to launch executable outside trusted directory.'
+                    }), 400
+
+                launcher_process = subprocess.Popen([launcher_exe])
                 
                 # Wait for launcher process to complete
                 def restore_after_process_exit():
