@@ -21,7 +21,7 @@ Security is a core priority for RUIE. This document outlines security practices,
 
 **DO NOT open a public issue for security vulnerabilities.**
 
-1. **Email**: Send details to Elegius+noreply@users.noreply.github.com
+1. **Email**: Send details to ruie-security-reports.exert649@slmail.me
 2. **GitHub Security Advisory**: Use GitHub's private vulnerability report feature
 3. **Provide**:
    - Vulnerability description
@@ -505,7 +505,7 @@ Before releasing a new version:
 
 ## Contact
 
-**Security Issues**: Report privately to maintainers  
+**Security Issues**: Email ruie-security-reports.exert649@slmail.me  
 **General Questions**: Open a discussion on GitHub  
 **Public Vulnerabilities**: Disclose after fix is released
 

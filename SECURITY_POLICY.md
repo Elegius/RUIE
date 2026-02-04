@@ -17,7 +17,7 @@ If you discover a security vulnerability in RUIE, please report it responsibly.
 2. Click "Report a vulnerability"
 3. Provide detailed information about the vulnerability
 
-**Or email the maintainers** (check MAINTAINERS.md for contact information)
+**Or email the maintainers**: ruie-security-reports.exert649@slmail.me
 
 ## Vulnerability Disclosure
 
