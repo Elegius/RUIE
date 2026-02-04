@@ -143,6 +143,7 @@ function startFlaskServer() {
  * Create main application window
  */
 function createWindow() {
+  console.log('[ELECTRON] Creating BrowserWindow...');
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 820,
@@ -158,12 +159,31 @@ function createWindow() {
     icon: path.join(__dirname, '../../assets/logos/icon.ico')
   });
   
+  console.log('[ELECTRON] BrowserWindow created, loading URL:', FLASK_URL);
+  
   // Load Flask app
   const url = isDev 
     ? `${FLASK_URL}` 
     : `${FLASK_URL}`;
   
-  mainWindow.loadURL(url);
+  mainWindow.loadURL(url).catch(err => {
+    console.error('[ELECTRON] Failed to load URL:', err);
+  });
+  
+  console.log('[ELECTRON] URL loading started');
+  
+  // Listen for window events
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.error('[ELECTRON] Failed to load page:', errorCode, errorDescription);
+  });
+  
+  mainWindow.webContents.on('did-finish-load', () => {
+    console.log('[ELECTRON] Page loaded successfully');
+  });
+  
+  mainWindow.webContents.on('crashed', () => {
+    console.error('[ELECTRON] Renderer process crashed!');
+  });
   
   // DevTools disabled for now - can be re-enabled if needed
   // if (isDev) {
@@ -171,9 +191,11 @@ function createWindow() {
   // }
   
   mainWindow.on('closed', () => {
+    console.log('[ELECTRON] Main window closed');
     mainWindow = null;
   });
   
+  console.log('[ELECTRON] Window setup complete');
   return mainWindow;
 }
 
