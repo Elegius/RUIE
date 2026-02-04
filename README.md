@@ -6,6 +6,7 @@ Custom launcher theme editor for Roberts Space Industries Launcher. Change color
 [![PyQt5](https://img.shields.io/badge/PyQt5-✓-green)](https://pypi.org/project/PyQt5/)
 [![Flask](https://img.shields.io/badge/Flask-✓-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
+[![CodeQL](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql)
 
 ## Features
 
