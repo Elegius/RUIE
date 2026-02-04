@@ -1,3 +1,32 @@
+"""
+RUIE (RSI Launcher Theme Customizer) Server
+============================================
+A Flask-based backend for extracting, modifying, and repackaging the RSI Launcher.
+
+What This Does:
+- Detects RSI Launcher installations on the user's system
+- Extracts the launcher's app.asar file (JavaScript bundle)
+- Allows users to modify colors, images, videos, and audio in the launcher
+- Repackages modified assets back into app.asar
+- Handles backups and restoration of original launcher
+
+Architecture:
+- Flask REST API (runs on http://localhost:5000)
+- JavaScript frontend (public/app.js) communicates with API
+- ThemeManager class handles extraction/modification workflow
+- LauncherDetector finds the RSI Launcher installation
+- ColorReplacer modifies color values in launcher JavaScript
+- MediaReplacer handles image, video, and audio replacements
+
+Security:
+- All file operations validated against LAUNCHER_ROOT_DIR
+- Path traversal attacks prevented with multiple checks
+- User-supplied paths checked for symlinks
+- API endpoints return generic error messages (details logged server-side)
+- CORS restricted to localhost only
+- Security headers added to all responses
+"""
+
 from flask import Flask, jsonify, request, send_from_directory, send_file
 from flask_cors import CORS
 import os
@@ -17,28 +46,50 @@ from launcher_detector import LauncherDetector
 from color_replacer import ColorReplacer
 from media_replacer import MediaReplacer
 
-# Production environment indicator
+# ============================================================================
+# CONFIGURATION & SECURITY SETTINGS
+# ============================================================================
+
+# Production environment indicator - controls debug output and security headers
 PRODUCTION_MODE = True  # Set to True for production deployment
 
-# Base directory under which launcher installations are considered trusted.
-# Adjust this path to match the expected RSI Launcher installation root on the host.
+# Security Boundary: Base directory where launcher must be installed
+# All file operations are validated to be within this directory
+# This prevents attackers from reading/writing arbitrary system files
+# Default: User's home directory (RSI Launcher typically installs here)
 LAUNCHER_ROOT_DIR = os.path.abspath(os.environ.get('RSI_LAUNCHER_ROOT', os.path.expanduser('~')))
 
-# Determine the base path for resources
+# Determine the base path for resources (works for both dev and PyInstaller)
 def get_resource_path(relative_path):
-    """Get absolute path to resource, works for dev and for PyInstaller."""
+    """
+    Get absolute path to a resource file.
+    
+    When running from source: returns path relative to this script
+    When packaged with PyInstaller: returns path relative to the temp folder
+    
+    Args:
+        relative_path: Path relative to the application root (e.g., 'public/index.html')
+    
+    Returns:
+        Absolute file system path
+    """
     try:
         # PyInstaller creates a temp folder and stores path in _MEIPASS
         base_path = sys._MEIPASS
     except AttributeError:
+        # Running from source - use script directory
         base_path = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base_path, relative_path)
 
-# Set up Flask with the correct static folder
+# ============================================================================
+# FLASK APPLICATION SETUP
+# ============================================================================
+
+# Set up Flask with the correct static folder (serves HTML, CSS, JS, images)
 static_folder = get_resource_path('public')
 app = Flask(__name__, static_folder=static_folder, static_url_path='')
 
-# Production security configuration
+# Production security configuration - disables debug output and stack traces
 if PRODUCTION_MODE:
     app.config['ENV'] = 'production'
     app.config['DEBUG'] = False
@@ -46,8 +97,9 @@ if PRODUCTION_MODE:
     app.config['PROPAGATE_EXCEPTIONS'] = False
     app.config['PRESERVE_CONTEXT_ON_EXCEPTION'] = False
 
-# CORS configuration - strict local desktop app only
-# Fixed to use specific port instead of wildcard
+# CORS (Cross-Origin Resource Sharing) configuration
+# Restricted to localhost only - prevents the web UI from communicating with unauthorized servers
+# Fixed to use specific port instead of wildcard for security
 CORS(app, resources={
     r"/api/*": {
         "origins": [
@@ -61,21 +113,28 @@ CORS(app, resources={
     }
 })
 
-# Performance configurations
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 86400  # 24 hour cache for static files
-app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max upload
-app.config['JSON_SORT_KEYS'] = False  # Don't sort JSON keys for speed
+# Performance and request size configurations
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 86400  # Cache static files for 24 hours
+app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # Max 500MB file uploads
+app.config['JSON_SORT_KEYS'] = False  # Don't reorder JSON for faster serialization
 
-# Add cache headers and security headers for static files
+# Security headers added to every response
 @app.after_request
 def add_security_headers(response):
-    """Add security headers and cache headers to responses."""
-    # Add security headers to prevent XSS and clickjacking
-    response.headers['X-Content-Type-Options'] = 'nosniff'  # Prevent MIME-type sniffing
-    response.headers['X-Frame-Options'] = 'SAMEORIGIN'  # Prevent clickjacking
-    response.headers['X-XSS-Protection'] = '1; mode=block'  # Enable XSS protection
+    """
+    Add HTTP security headers to prevent common attacks.
     
-    # Production security headers
+    Headers explained:
+    - X-Content-Type-Options: Prevents browser from guessing MIME types
+    - X-Frame-Options: Prevents clickjacking by blocking iframe embedding
+    - X-XSS-Protection: Enables browser's built-in XSS filter
+    - Strict-Transport-Security: Force HTTPS (production only)
+    - Content-Security-Policy: Restricts what scripts/styles can be loaded
+    """
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-XSS-Protection'] = '1; mode=block'
+    
     if PRODUCTION_MODE:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
@@ -85,42 +144,59 @@ def add_security_headers(response):
                                    'font' in response.content_type or
                                    'css' in response.content_type or
                                    'javascript' in response.content_type):
-        response.cache_control.max_age = 86400  # 24 hours for static assets
+        response.cache_control.max_age = 86400
     return response
 
-# Configuration
+# Working directory for extractions, backups, and temporary files
 DOCS_DIR = os.path.expanduser('~/Documents/RUIE')
 os.makedirs(DOCS_DIR, exist_ok=True)
 
 # ============================================================================
 # SECURITY VALIDATION FUNCTIONS
 # ============================================================================
+# These functions ensure user-supplied input doesn't enable attacks like:
+# - Path traversal (accessing files outside launcher directory)
+# - Symlink attacks (following links to arbitrary locations)
+# - XSS attacks (malicious content in filenames)
+# - File type abuse (uploading dangerous file types)
 
-# Allowed media file extensions (whitelist approach)
+# Allowed media file extensions (whitelist approach for security)
+# Only these file types can be uploaded and used in the theme
 ALLOWED_MEDIA_EXTENSIONS = {
-    # Images
+    # Images - used as launcher backgrounds, icons, etc.
     'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff',
-    # Videos
+    # Videos - used as launcher background videos
     'mp4', 'webm', 'mkv', 'avi', 'mov', 'm4v', 'flv', 'wmv', 'mpg', 'mpeg',
-    # Audio
+    # Audio - used as launcher background music
     'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma', 'opus', 'aiff'
 }
 
-# Max file sizes by category
+# Maximum file sizes by category (prevents DoS attacks via huge files)
 MAX_FILE_SIZES = {
-    'images': 100 * 1024 * 1024,     # 100MB
-    'videos': 1000 * 1024 * 1024,    # 1GB
-    'audio': 200 * 1024 * 1024       # 200MB
+    'images': 100 * 1024 * 1024,     # 100MB - high enough for 4K images
+    'videos': 1000 * 1024 * 1024,    # 1GB - for background videos
+    'audio': 200 * 1024 * 1024       # 200MB - for music files
 }
 
-# Allowed extraction folder names (pattern validation)
+# Extraction folder naming pattern (prevents arbitrary folder names)
+# Folders must start with these prefixes to be recognized as valid extractions
 ALLOWED_EXTRACT_PATTERNS = [
-    'app-decompiled-',
-    'app-extracted-'
+    'app-decompiled-',  # Extraction timestamp format
+    'app-extracted-'    # Alternative extraction format
 ]
 
 def get_file_category(filename):
-    """Determine file category from extension."""
+    """
+    Determine file category from file extension.
+    
+    Used to enforce size limits appropriate to each media type.
+    
+    Args:
+        filename: Name of the file
+    
+    Returns:
+        One of: 'images', 'videos', 'audio', or None if unknown
+    """
     ext = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
     
     image_exts = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico', 'tiff'}
@@ -137,21 +213,33 @@ def get_file_category(filename):
 
 def validate_file_upload(filename, file_size):
     """
-    Validate uploaded file is safe.
-    Returns (is_valid, error_message)
+    Validate an uploaded file is safe before processing.
+    
+    Checks:
+    - File has a recognized extension (whitelist)
+    - File size is within limits for its category
+    - Filename doesn't contain path traversal characters
+    
+    Args:
+        filename: Name of the uploaded file
+        file_size: Size in bytes
+    
+    Returns:
+        Tuple of (is_valid: bool, error_message: str)
     """
     if not filename:
         return False, "Missing filename"
     
-    # Check extension
+    # Check file has an extension
     if '.' not in filename:
         return False, "File must have an extension"
     
+    # Whitelist check: only allow specific file extensions
     ext = filename.rsplit('.', 1)[1].lower()
     if ext not in ALLOWED_MEDIA_EXTENSIONS:
         return False, f"File type not allowed: {ext}. Allowed types: {', '.join(sorted(ALLOWED_MEDIA_EXTENSIONS))}"
     
-    # Check file size
+    # Size check: enforce limits based on file category
     category = get_file_category(filename)
     if category:
         max_size = MAX_FILE_SIZES.get(category, 100 * 1024 * 1024)
@@ -159,7 +247,7 @@ def validate_file_upload(filename, file_size):
             max_mb = max_size / (1024 * 1024)
             return False, f"File too large. Max size for {category}: {max_mb:.0f}MB"
     
-    # Prevent suspicious filenames
+    # Path traversal check: prevent "../" and similar attacks in filename
     if '..' in filename or '/' in filename or '\\' in filename:
         return False, "Invalid filename characters"
     
@@ -167,33 +255,43 @@ def validate_file_upload(filename, file_size):
 
 def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
     """
-    Validate that a path is safe and within allowed directory.
-    Returns (is_safe, resolved_path, error_message)
+    Validate that a requested path is safe and within the allowed directory.
+    
+    This is critical for security - prevents:
+    - Path traversal attacks (../ sequences)
+    - Symlink attacks (following links outside base_dir)
+    - Accessing arbitrary system files
     
     Args:
-        requested_path: The path to validate
-        base_dir: The base directory it must be within
-        allowed_prefixes: Optional list of allowed folder name prefixes
+        requested_path: Path to validate
+        base_dir: Base directory the path must be within
+        allowed_prefixes: Optional list of folder name prefixes to check
+    
+    Returns:
+        Tuple of (is_safe: bool, resolved_path: Path or None, error_message: str)
     """
     try:
-        base = Path(base_dir).resolve()
+        base = Path(base_dir).resolve()  # Resolve symlinks and relative paths
         requested = Path(requested_path).resolve()
         
-        # Check if path exists (prevents some attacks)
+        # Path must exist (prevents some attack vectors)
         if not requested.exists():
             return False, None, f"Path does not exist: {requested_path}"
         
-        # Check if path is within base directory
+        # Critical: Ensure path is within base directory
+        # relative_to() will raise ValueError if requested is outside base
         try:
             requested.relative_to(base)
         except ValueError:
             return False, None, f"Path is outside allowed directory: {requested_path}"
         
-        # Check symlinks (prevent symlink attacks)
+        # Symlink check: reject if the target or any parent is a symlink
+        # This prevents attacks where a symlink points to system files
         if requested.is_symlink() or any(part.is_symlink() for part in requested.parents):
             return False, None, "Symlinks are not allowed"
         
-        # Check allowed prefixes if specified (e.g., extraction folders)
+        # Optional: Check folder name follows allowed pattern
+        # Used for extraction folders which should have specific names
         if allowed_prefixes:
             folder_name = requested.name
             if not any(folder_name.startswith(prefix) for prefix in allowed_prefixes):
@@ -207,38 +305,52 @@ def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
 def validate_color_mapping(color_mappings):
     """
     Validate color mappings are safe and properly formatted.
-    Returns (is_valid, validated_mappings, error_message)
+    
+    Checks:
+    - Mappings are a dictionary (not lists, strings, etc.)
+    - Count is reasonable (prevents memory exhaustion)
+    - Keys and values are strings
+    - No control characters in strings
+    - Color values are in recognized formats (hex, rgb, rgba)
+    
+    Args:
+        color_mappings: Dictionary of old_color -> new_color mappings
+    
+    Returns:
+        Tuple of (is_valid: bool, validated_mappings: dict, error_message: str)
     """
     if not isinstance(color_mappings, dict):
         return False, {}, "Color mappings must be a dictionary"
     
+    # Prevent DoS via huge mappings
     if len(color_mappings) > 500:
         return False, {}, "Too many color mappings (max 500)"
     
     validated = {}
     
     for key, value in color_mappings.items():
-        # Validate key
+        # Key validation: must be string, reasonable length
         if not isinstance(key, str):
             return False, {}, f"Color key must be string, got {type(key).__name__}"
         
         if len(key) > 200:
             return False, {}, f"Color key too long: {len(key)} chars (max 200)"
         
-        # Prevent null bytes and other control characters
+        # Control character check: prevent null bytes and other dangerous chars
         if '\x00' in key or any(ord(c) < 32 for c in key if c not in '\t\n\r'):
             return False, {}, "Color key contains invalid characters"
         
-        # Validate value
+        # Value validation: must be string, reasonable length
         if not isinstance(value, str):
             return False, {}, f"Color value must be string, got {type(value).__name__}"
         
         if len(value) > 200:
             return False, {}, f"Color value too long: {len(value)} chars (max 200)"
         
-        # Validate hex color format (more lenient to support various color formats)
+        # Hex color or CSS rgb/rgba format check
+        # Allows standard hex (#FFF, #FFFFFF), rgb(), and rgba() formats
         if not re.match(r'^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$|^rgb\(\d+,\s*\d+,\s*\d+\)$|^rgba\(\d+,\s*\d+,\s*\d+,\s*[\d.]+\)$', value):
-            # Allow custom values but warn
+            # Fallback: allow alphanumeric + standard CSS chars but reject others
             if not re.match(r'^[a-zA-Z0-9\-#\(\),.\s]+$', value):
                 return False, {}, f"Invalid color format: {value}"
         
@@ -250,23 +362,62 @@ def validate_color_mapping(color_mappings):
 # END SECURITY VALIDATION FUNCTIONS
 # ============================================================================
 
+# ============================================================================
+# THEME MANAGER CLASS
+# ============================================================================
+"""
+ThemeManager orchestrates the entire theme customization workflow:
+
+1. DETECTION: Find RSI Launcher installation on system
+2. EXTRACTION: Extract app.asar (JavaScript bundle) to temp directory
+3. MODIFICATION: Apply color/media changes to extracted files
+4. BACKUP: Save original launcher backup
+5. REPACK: Repackage modified files back into app.asar
+6. INSTALL: Replace launcher's app.asar with modified version
+
+The class maintains status information for the web UI to display
+progress and any errors that occur during operations.
+"""
+
 class ThemeManager:
-    """Manage theme extraction, backup, and repacking."""
+    """
+    Orchestrate the full theme customization workflow.
+    
+    This class manages the complex process of extracting, modifying,
+    and repackaging the RSI Launcher's app.asar file.
+    
+    Attributes:
+        launcher_info: Dictionary with launcher path info from LauncherDetector
+        extracted_dir: Path to extracted app.asar contents
+        backup_dir: Path to backup directory
+        color_apply_thread: Threading control for async color application
+        status: Dictionary tracking current operation status
+    """
     
     def __init__(self):
-        self.launcher_info = None
-        self.extracted_dir = None
-        self.backup_dir = None
-        self.color_apply_thread = None
+        self.launcher_info = None          # Info about launcher location/paths
+        self.extracted_dir = None          # Temp directory with extracted files
+        self.backup_dir = None             # Backup of original launcher
+        self.color_apply_thread = None     # For async color replacement
         self.status = {
-            'operation': None,
-            'state': 'idle',
-            'message': 'Idle',
-            'progress': 0,
-            'lastError': None
+            'operation': None,             # Current operation (extract, apply-colors, etc.)
+            'state': 'idle',               # idle, running, complete, error
+            'message': 'Idle',             # User-friendly status message
+            'progress': 0,                 # Percentage 0-100
+            'lastError': None              # Last error message if failed
         }
 
     def set_status(self, operation, state, message, progress=None, last_error=None):
+        """
+        Update operation status (used by web UI to show progress).
+        
+        Args:
+            operation: Name of current operation
+            state: One of 'idle', 'running', 'complete', 'error'
+            message: Human-readable status message
+            progress: Optional progress percentage (0-100)
+            last_error: Optional error message if failed
+        """
         self.status['operation'] = operation
         self.status['state'] = state
         self.status['message'] = message
@@ -276,12 +427,31 @@ class ThemeManager:
             self.status['lastError'] = last_error
     
     def init(self):
-        """Initialize launcher detection."""
+        """
+        Initialize by detecting RSI Launcher installation.
+        
+        This is the first step - finds where the launcher is installed
+        and reads its configuration.
+        
+        Returns:
+            True if launcher found and initialized, False otherwise
+        """
         self.launcher_info = LauncherDetector.detect()
         return self.launcher_info is not None
     
     def extract_asar(self):
-        """Extract app.asar to temp directory."""
+        """
+        Extract app.asar from launcher to a temp directory.
+        
+        Process:
+        1. Validate launcher is initialized
+        2. Use 'asar unpack' command to extract the bundle
+        3. Store extraction path in self.extracted_dir
+        4. Create timestamped folder name to avoid conflicts
+        
+        Returns:
+            True if extraction successful, False on error
+        """
         if not self.launcher_info:
             print("[ThemeManager] Launcher info is None")
             self.set_status('extract', 'error', 'Launcher not initialized', progress=0, last_error='Launcher not initialized')
@@ -483,7 +653,20 @@ class ThemeManager:
             return 0
     
     def apply_colors_async(self, color_mappings):
-        """Apply color replacements in a background thread."""
+        """
+        Apply color replacements in a background thread.
+        
+        This is an asynchronous operation - returns immediately while
+        the actual color replacement happens in the background.
+        
+        The web UI polls /api/status to check progress.
+        
+        Args:
+            color_mappings: Dictionary of old_color -> new_color
+        
+        Returns:
+            True if started successfully, False if another operation in progress
+        """
         def _apply():
             self.apply_colors(color_mappings)
         
@@ -496,14 +679,45 @@ class ThemeManager:
         return True
     
     def apply_media(self, media_mappings):
-        """Apply media replacements."""
+        """
+        Apply media file replacements (images, videos, audio).
+        
+        Copies uploaded replacement media files to the extracted directory,
+        replacing the original launcher media.
+        
+        Args:
+            media_mappings: Dictionary of launcher_path -> uploaded_file_path
+        
+        Returns:
+            Dictionary of results for each media file
+        """
         if not self.extracted_dir or not os.path.exists(self.extracted_dir):
             return {}
         
         return MediaReplacer.apply_media(self.extracted_dir, media_mappings)
     
     def repack_asar(self):
-        """Repack extracted directory back into app.asar."""
+        """
+        Repack the extracted directory back into app.asar.
+        
+        After all modifications are complete, this repacks the modified
+        files back into the app.asar archive that the launcher can use.
+        
+        Process:
+        1. Validate extracted directory exists
+        2. Backup original app.asar if not already backed up
+        3. Remove old app.asar
+        4. Run 'asar pack' command to create new archive
+        5. Copy repacked app.asar to launcher location
+        
+        Returns:
+            True if successful, False on error
+        
+        Errors:
+            - No extracted directory
+            - Permission denied (needs admin)
+            - asar command failed
+        """
         if not self.extracted_dir or not self.launcher_info:
             return False
         
@@ -911,17 +1125,58 @@ def api_extracted_asset():
     if not theme_manager.extracted_dir:
         return jsonify({'success': False, 'error': 'Nothing extracted yet'}), 400
 
-    # Validate path to prevent traversal attacks
-    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path:
+    # Validate path components to prevent traversal attacks
+    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path or rel_path.startswith('.'):
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
-    base = Path(theme_manager.extracted_dir).resolve()
+    # Check path components
+    path_parts = Path(rel_path).parts
+    for part in path_parts:
+        if part in ('.', '..') or part.startswith('.'):
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
+    # Validate extracted_dir is within trusted root (defense against user-controlled paths)
+    try:
+        launcher_root_resolved = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+        extracted_dir_resolved = Path(theme_manager.extracted_dir).expanduser().resolve(strict=False)
+        
+        # Ensure extracted_dir is inside the trusted root
+        try:
+            extracted_dir_resolved.relative_to(launcher_root_resolved)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+        
+        # Check for symlinks in extracted_dir
+        if extracted_dir_resolved.is_symlink():
+            return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+    except (OSError, ValueError):
+        return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+
+    base = extracted_dir_resolved
+    
+    # Check for symlinks in the base directory itself
+    if base.is_symlink():
+        return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+
     target = (base / rel_path).resolve()
 
     # Use relative_to for secure path validation
     try:
         target.relative_to(base)
     except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
+    # Check for symlinks in the target or any parent directories within base
+    if target.is_symlink():
+        return jsonify({'success': False, 'error': 'Symlinks not allowed'}), 403
+    
+    try:
+        for parent in target.parents:
+            if parent == base:
+                break
+            if parent.is_symlink():
+                return jsonify({'success': False, 'error': 'Symlinks not allowed'}), 403
+    except (OSError, ValueError):
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
     if not target.exists() or not target.is_file():
@@ -939,19 +1194,63 @@ def api_launcher_asset():
     if not theme_manager.launcher_dir:
         return jsonify({'success': False, 'error': 'Launcher not detected'}), 400
 
-    # Validate path to prevent traversal attacks
-    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path:
+    # Validate path components to prevent traversal attacks
+    if rel_path.startswith('/') or rel_path.startswith('\\') or '..' in rel_path or rel_path.startswith('.'):
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
+    # Check path components
+    path_parts = Path(rel_path).parts
+    for part in path_parts:
+        if part in ('.', '..') or part.startswith('.'):
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
+    # Validate launcher_dir is within trusted root (defense against user-controlled paths)
+    try:
+        launcher_root_resolved = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+        launcher_path_resolved = Path(theme_manager.launcher_dir).expanduser().resolve(strict=False)
+        
+        # Ensure launcher_dir is inside the trusted root
+        try:
+            launcher_path_resolved.relative_to(launcher_root_resolved)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
+        
+        # Check for symlinks in launcher_path
+        if launcher_path_resolved.is_symlink():
+            return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+    except (OSError, ValueError):
+        return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
+
     # Look for the file in the launcher's app directory
-    launcher_path = Path(theme_manager.launcher_dir)
+    launcher_path = launcher_path_resolved
     app_dir = launcher_path / 'resources' / 'app.asar.unpacked'
     
     # If app.asar.unpacked doesn't exist, try extracted_dir
     if not app_dir.exists() and theme_manager.extracted_dir:
-        app_dir = Path(theme_manager.extracted_dir)
+        # Validate extracted_dir is within trusted root
+        try:
+            extracted_dir_resolved = Path(theme_manager.extracted_dir).expanduser().resolve(strict=False)
+            extracted_dir_resolved.relative_to(launcher_root_resolved)
+            if extracted_dir_resolved.is_symlink():
+                return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+            app_dir = extracted_dir_resolved
+        except (OSError, ValueError):
+            return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+    else:
+        app_dir = app_dir.resolve()
     
-    base = app_dir.resolve()
+    base = app_dir
+    
+    # Verify base is within trusted root
+    try:
+        base.relative_to(launcher_root_resolved)
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    
+    # Check for symlinks in the base directory itself
+    if base.is_symlink():
+        return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+
     target = (base / rel_path).resolve()
 
     # Use relative_to for secure path validation
@@ -960,15 +1259,67 @@ def api_launcher_asset():
     except ValueError:
         return jsonify({'success': False, 'error': 'Invalid path'}), 403
 
+    # Check for symlinks in the target or any parent directories within base
+    if target.is_symlink():
+        return jsonify({'success': False, 'error': 'Symlinks not allowed'}), 403
+    
+    try:
+        for parent in target.parents:
+            if parent == base:
+                break
+            if parent.is_symlink():
+                return jsonify({'success': False, 'error': 'Symlinks not allowed'}), 403
+    except (OSError, ValueError):
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+
     if not target.exists() or not target.is_file():
         return jsonify({'success': False, 'error': 'File not found'}), 404
 
     return send_file(str(target))
 
-# REST API endpoints
+# ============================================================================
+# REST API ENDPOINTS
+# ============================================================================
+"""
+REST API Endpoints
+==================
+
+The frontend (public/app.js) communicates with the Flask backend using these
+REST endpoints. All endpoints return JSON responses with a 'success' field.
+
+Endpoint Categories:
+1. INITIALIZATION: /api/init, /api/status
+2. EXTRACTION: /api/extract, /api/extracted-list, /api/delete-extract
+3. COLOR MODIFICATION: /api/apply-colors, /api/check-updates
+4. MEDIA: /api/upload-media, /api/clear-music
+5. BACKUP/RESTORE: /api/create-backup, /api/restore-backup, /api/backups
+6. INSTALLATION: /api/install-asar, /api/test-launcher, /api/deploy-theme
+7. CONFIG: /api/config/save, /api/config/load, /api/config/list
+8. PRESETS: /api/save-preset
+
+Security Note:
+All endpoints validate paths against LAUNCHER_ROOT_DIR to prevent unauthorized
+file access. User-supplied paths are checked for:
+- Directory traversal attempts (..)
+- Symlink attacks
+- Escaping the trusted directory boundary
+"""
+
 @app.route('/api/init', methods=['GET', 'POST'])
 def api_init():
-    """Initialize and detect launcher."""
+    """
+    Initialize by detecting RSI Launcher installation.
+    
+    GET: Auto-detect launcher from standard locations
+    POST: Accept explicit asarPath from user
+    
+    Response:
+        {
+            'success': bool,
+            'launcher_info': { 'asarPath': '...', 'executablePath': '...', ... },
+            'error': str (on failure)
+        }
+    """
     try:
         # Check if asarPath is provided in the request
         asar_path = None
@@ -1037,9 +1388,10 @@ def api_init():
     except Exception as e:
         import traceback
         traceback.print_exc()
+        print(f'[API Error] {str(e)}')
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'An error occurred during initialization. Please try again.'
         }), 500
 
 @app.route('/api/detect-launcher', methods=['GET', 'POST'])
@@ -1061,7 +1413,7 @@ def api_launcher_status():
         print(f"Error checking launcher status: {e}")
         return jsonify({
             'success': False,
-            'error': str(e),
+            'error': 'Failed to check launcher status',
             'isRunning': False
         }), 500
 
@@ -1076,7 +1428,7 @@ def api_debug_log():
         return jsonify({'success': True})
     except Exception as e:
         print(f"Error logging JS message: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to log message'}), 500
 
 @app.route('/api/update-manager', methods=['GET'])
 def api_update_manager():
@@ -1109,7 +1461,7 @@ def api_update_manager():
         })
     except Exception as e:
         print(f'[API Error] Update manager error: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to retrieve update information'}), 500
 
 @app.route('/api/download-update', methods=['POST'])
 def api_download_update():
@@ -1130,7 +1482,7 @@ def api_download_update():
         })
     except Exception as e:
         print(f'[API Error] Download update error: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to download update'}), 500
 
 @app.route('/api/browse-for-asar', methods=['POST'])
 def api_browse_for_asar():
@@ -1168,12 +1520,35 @@ def api_browse_for_asar():
         print(f"Error opening file picker: {e}")
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to open file picker'
         }), 500
 
 @app.route('/api/extract', methods=['POST'])
 def api_extract():
-    """Extract app.asar."""
+    """
+    Extract the launcher's app.asar file.
+    
+    This is the first major step in theme customization:
+    1. Creates a backup of the original app.asar
+    2. Extracts app.asar to a temp directory
+    3. Returns paths to the extracted contents and backup
+    
+    The extracted directory contains all launcher JavaScript, CSS, images, etc.
+    These can then be modified before repackaging.
+    
+    Response:
+        {
+            'success': bool,
+            'extractedPath': str (path to extracted contents),
+            'backupPath': str (path to backup),
+            'error': str (on failure)
+        }
+    
+    Errors:
+        - Launcher not initialized: Run /api/init first
+        - Backup creation failed: Unable to write to disk
+        - Extraction failed: asar tool missing or permissions issue
+    """
     print("[API] /api/extract called")
     try:
         print(f"[API] theme_manager.launcher_info: {theme_manager.launcher_info}")
@@ -1208,7 +1583,7 @@ def api_extract():
         print(f'[API Error] Extract failed: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Extraction failed. Please try again.'}), 500
 
 @app.route('/api/open-latest-extract', methods=['POST'])
 def api_open_latest_extract():
@@ -1224,7 +1599,8 @@ def api_open_latest_extract():
         os.startfile(str(path))
         return jsonify({'success': True, 'path': str(path)})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'Error opening folder: {e}')
+        return jsonify({'success': False, 'error': 'Failed to open folder'}), 500
 
 @app.route('/api/extracted-list', methods=['GET'])
 def api_extracted_list():
@@ -1266,7 +1642,7 @@ def api_extracted_list():
         print(f'[API Error] Failed to list extracts: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to retrieve extraction list'}), 500
 
 @app.route('/api/backups-list', methods=['GET'])
 def api_backups_list():
@@ -1304,9 +1680,7 @@ def api_backups_list():
         print(f'[API Error] Failed to list backups: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-@app.route('/api/use-extract', methods=['POST'])
+        return jsonify({'success': False, 'error': 'Failed to retrieve backup list'}), 500
 def api_use_extract():
     """Set an existing extracted folder as active."""
     data = request.json or {}
@@ -1385,7 +1759,7 @@ def api_delete_extract():
         print(f'[API Error] Failed to delete extract: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': f'Failed to delete: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': 'Failed to delete extraction'}), 500
 
 @app.route('/api/create-backup', methods=['POST'])
 def api_create_backup():
@@ -1405,7 +1779,7 @@ def api_create_backup():
             return jsonify({'success': False, 'error': error}), 500
     except Exception as e:
         print(f'[API Error] Failed to create backup: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to create backup'}), 500
 
 @app.route('/api/restore-backup', methods=['POST'])
 def api_restore_backup():
@@ -1456,7 +1830,7 @@ def api_restore_backup():
             
     except Exception as e:
         print(f'[API Error] Failed to restore backup: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to restore backup'}), 500
 
 @app.route('/api/extraction-changes', methods=['GET'])
 def api_extraction_changes():
@@ -1536,26 +1910,29 @@ def api_check_updates():
                 })
         except urllib.error.URLError as e:
             # Network error - return current version with no update info
+            print(f'[API Error] Network error checking updates: {str(e)}')
             return jsonify({
                 'success': True,
                 'current_version': APP_VERSION,
                 'latest_version': APP_VERSION,
                 'has_update': False,
-                'error': f'Could not check updates: {str(e)}'
+                'error': 'Could not check updates: network unavailable'
             }), 200
         except Exception as e:
+            print(f'[API Error] Update check exception: {str(e)}')
             return jsonify({
                 'success': True,
                 'current_version': APP_VERSION,
                 'latest_version': APP_VERSION,
                 'has_update': False,
-                'error': f'Update check error: {str(e)}'
+                'error': 'Update check error: please try again later'
             }), 200
             
     except Exception as e:
+        print(f'[API Error] Update check failed: {str(e)}')
         return jsonify({
             'success': False,
-            'error': f'Update check failed: {str(e)}'
+            'error': 'Update check failed: please try again'
         }), 500
 
 @app.route('/api/app-version', methods=['GET'])
@@ -1568,14 +1945,49 @@ def api_app_version():
             'version': APP_VERSION
         })
     except Exception as e:
+        print(f'Error retrieving extraction changes: {e}')
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to retrieve extraction changes'
         }), 500
 
 @app.route('/api/apply-colors', methods=['POST'])
 def api_apply_colors():
-    """Apply color replacements asynchronously."""
+    """
+    Apply color replacements to extracted launcher files.
+    
+    Color replacement works by finding old color values in JavaScript/CSS
+    and replacing them with new color values provided by the user.
+    
+    Process:
+    1. Validate color mappings (hex format, count, string length)
+    2. Start async color replacement operation
+    3. Traverse all files in extracted directory
+    4. Replace old colors with new colors
+    5. Return success status
+    
+    Request Body:
+        {
+            'colors': {
+                '#FF0000': '#00FF00',  // Replace red with green
+                '#FFFFFF': '#000000',  // Replace white with black
+                ...
+            }
+        }
+    
+    Response:
+        {
+            'success': bool,
+            'message': str,
+            'async': bool (operation runs in background),
+            'error': str (on failure)
+        }
+    
+    Security:
+    - Color values validated against format and length limits
+    - Number of mappings limited to 500
+    - Prevents null bytes and control characters
+    """
     try:
         data = request.json
         if not data:
@@ -1605,11 +2017,31 @@ def api_apply_colors():
         print(f"Error in apply_colors: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to apply colors'}), 500
 
 @app.route('/api/apply-media', methods=['POST'])
 def api_apply_media():
-    """Apply media replacements."""
+    """
+    Apply media replacements (images, videos, audio).
+    
+    Replaces images, videos, and audio files in the launcher.
+    User uploads replacement media, which is copied to the extraction directory.
+    
+    Request Body:
+        {
+            'media': {
+                'path/to/image.png': 'path/to/uploaded/image.png',
+                ...
+            }
+        }
+    
+    Response:
+        {
+            'success': bool,
+            'results': {...},
+            'error': str (on failure)
+        }
+    """
     data = request.json
     media_mappings = data.get('media', {})
     
@@ -1622,7 +2054,20 @@ def api_apply_media():
 
 @app.route('/api/repack', methods=['POST'])
 def api_repack():
-    """Repack app.asar."""
+    """
+    Repack modified files back into app.asar.
+    
+    After applying color and media changes, repack the extracted directory
+    back into the app.asar bundle. This can be done either with or without
+    installing the changes to the actual launcher.
+    
+    Response:
+        {
+            'success': bool,
+            'asarPath': str (path to newly created app.asar),
+            'error': str (on failure)
+        }
+    """
     if not theme_manager.repack_asar():
         return jsonify({'success': False, 'error': 'Failed to repack app.asar'}), 500
     
@@ -1687,7 +2132,7 @@ def api_upload_media():
         return jsonify({'success': True, 'message': 'File replaced', 'targetPath': target_path})
     except Exception as e:
         print(f"[API Error] Upload failed: {str(e)}")
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to upload file'}), 500
 
 @app.route('/api/clear-music', methods=['POST'])
 def api_clear_music():
@@ -1710,7 +2155,8 @@ def api_clear_music():
             
         return jsonify({'success': True, 'message': 'Music directory cleared'})
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'Error clearing music directory: {e}')
+        return jsonify({'success': False, 'error': 'Failed to clear music directory'}), 500
 
 @app.route('/api/update-music-code', methods=['POST'])
 def api_update_music_code():
@@ -1771,7 +2217,8 @@ def api_update_music_code():
         })
         
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'[API Error] Failed to update music code: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to update music code'}), 500
 
 @app.route('/api/compile-changes', methods=['POST'])
 def api_compile_changes():
@@ -1888,6 +2335,7 @@ def api_test_launcher():
                     'error': 'Permission denied: Unable to access launcher in Program Files. Try running this application as Administrator.'
                 }), 403
             except Exception as e:
+                print(f'[API Error] Failed to replace app.asar: {str(e)}')
                 try:
                     os.remove(temp_asar)
                 except OSError:
@@ -1895,7 +2343,7 @@ def api_test_launcher():
                     pass
                 return jsonify({
                     'success': False,
-                    'error': f'Failed to replace app.asar: {str(e)}'
+                    'error': 'Failed to replace app.asar: please try again'
                 }), 500
             
             try:
@@ -2054,11 +2502,11 @@ def api_test_launcher():
             print(f'[API Error] Test launcher failed: {str(e)}')
             import traceback
             traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': 'Failed to test launcher'}), 500
     
     except Exception as e:
         print(f'[API Error] Test launcher request failed: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to test launcher'}), 500
 
 @app.route('/api/compile-asar', methods=['POST'])
 def api_compile_asar():
@@ -2117,11 +2565,11 @@ def api_compile_asar():
             print(f'[API Error] Compile asar failed: {str(e)}')
             import traceback
             traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': 'Failed to compile asar'}), 500
     
     except Exception as e:
         print(f'[API Error] Compile asar request failed: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to compile asar'}), 500
 
 @app.route('/api/install-asar', methods=['POST'])
 def api_install_asar():
@@ -2158,9 +2606,10 @@ def api_install_asar():
                     'error': 'Permission denied: Unable to back up original launcher. Try running this application as Administrator.'
                 }), 403
             except Exception as e:
+                print(f'[API Error] Backup creation failed: {str(e)}')
                 return jsonify({
                     'success': False,
-                    'error': f'Failed to create backup: {str(e)}'
+                    'error': 'Failed to create backup: please try again'
                 }), 500
             
             # Pack the extracted dir to the actual launcher location
@@ -2217,17 +2666,17 @@ def api_install_asar():
                 print(f'[API Error] Installation failed: {str(e)}')
                 import traceback
                 traceback.print_exc()
-                return jsonify({'success': False, 'error': str(e)}), 500
+                return jsonify({'success': False, 'error': 'Failed to install asar'}), 500
         
         except Exception as e:
             print(f'[API Error] Install asar failed: {str(e)}')
             import traceback
             traceback.print_exc()
-            return jsonify({'success': False, 'error': str(e)}), 500
+            return jsonify({'success': False, 'error': 'Failed to install asar'}), 500
     
     except Exception as e:
         print(f'[API Error] Install asar request failed: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to install asar'}), 500
 
 @app.route('/api/deploy-theme', methods=['POST'])
 def api_deploy_theme():
@@ -2246,9 +2695,10 @@ def api_deploy_theme():
                     'error': 'Failed to repack app.asar'
                 }), 500
         except PermissionError as pe:
+            print(f'[API Error] Deploy theme permission denied: {str(pe)}')
             return jsonify({
                 'success': False,
-                'error': f'Permission denied: {str(pe)}. Please run this application as Administrator to deploy themes.'
+                'error': 'Permission denied: Please run this application as Administrator to deploy themes.'
             }), 403
         
         return jsonify({
@@ -2260,7 +2710,7 @@ def api_deploy_theme():
         print(f'[API Error] Deploy theme failed: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to deploy theme'}), 500
 
 @app.route('/api/config/save', methods=['POST'])
 def api_config_save():
@@ -2299,7 +2749,7 @@ def api_config_save():
         })
     except Exception as e:
         print(f'[API Error] Save config failed: {str(e)}')
-        return jsonify({'success': False, 'error': str(e)}), 500
+        return jsonify({'success': False, 'error': 'Failed to save configuration'}), 500
 
 @app.route('/api/config/export', methods=['POST'])
 def api_config_export():
@@ -2322,7 +2772,8 @@ def api_config_export():
             'theme': theme_data
         })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'[API Error] Export config failed: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to export configuration'}), 500
 
 @app.route('/api/config/list', methods=['GET'])
 def api_config_list():
@@ -2382,7 +2833,8 @@ def api_config_load():
             'theme': theme_data
         })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'[API Error] Load config failed: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to load configuration'}), 500
 
 @app.route('/api/backups', methods=['GET', 'POST'])
 def api_backups():
@@ -2398,7 +2850,8 @@ def api_backups():
             
             return jsonify({'success': True, 'message': 'Backup created successfully'})
         except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
+            print(f'[API Error] Create backup failed: {str(e)}')
+            return jsonify({'success': False, 'error': 'Failed to create backup'}), 500
     
     # GET: List backups - use same directory as extractions
     backup_dir = os.path.normpath(DOCS_DIR)
@@ -2452,7 +2905,8 @@ def api_restore():
             'message': 'Launcher restored from backup'
         })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'[API Error] Restore from backup failed: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to restore from backup'}), 500
 
 @app.route('/api/delete-backup', methods=['POST'])
 def api_delete_backup():
@@ -2485,7 +2939,7 @@ def api_delete_backup():
         print(f'[API Error] Failed to delete backup: {str(e)}')
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': f'Failed to delete: {str(e)}'}), 500
+        return jsonify({'success': False, 'error': 'Failed to delete backup'}), 500
 
 @app.route('/api/save-preset', methods=['POST'])
 def api_save_preset():
@@ -2522,13 +2976,158 @@ def api_save_preset():
             'filename': filename
         })
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
+        print(f'[API Error] Save preset failed: {str(e)}')
+        return jsonify({'success': False, 'error': 'Failed to save preset'}), 500
 
 # Catch-all route for static files (must be AFTER all API routes)
 @app.route('/<path:path>')
 def serve_static(path):
-    """Serve static files from public directory."""
+    """
+    Serve static files from the public directory.
+    
+    This handles requests for HTML, CSS, JavaScript, images, etc.
+    that don't match any specific API route.
+    """
     return send_from_directory(static_folder, path)
+
+# ============================================================================
+# APPLICATION WORKFLOW SUMMARY
+# ============================================================================
+"""
+Complete Theme Customization Workflow
+======================================
+
+The RUIE application provides a web-based UI to modify the RSI Launcher.
+Here's how the process works from start to finish:
+
+1. INITIALIZATION (/api/init)
+   - Detects RSI Launcher installation location
+   - Reads launcher configuration and paths
+   - User can also provide custom launcher path
+
+2. EXTRACTION (/api/extract)
+   - Creates backup of original app.asar
+   - Extracts app.asar using 'asar unpack' command
+   - Saves extracted files to ~/Documents/RUIE/app-decompiled-[timestamp]
+   - Extracted files include all launcher JavaScript, CSS, images, etc.
+
+3. MODIFICATION (Multiple API endpoints)
+   
+   a) Color Replacement (/api/apply-colors)
+      - User specifies color mappings (old_color -> new_color)
+      - Scans all JavaScript/CSS files for color values
+      - Replaces occurrences with new colors
+      - Updates launcher UI appearance without code changes
+   
+   b) Media Replacement (/api/upload-media, /api/apply-media)
+      - User uploads replacement images, videos, or audio
+      - Validates file types and sizes
+      - Copies to extracted directory replacing originals
+      - Launcher will use new media on next run
+
+4. REPACKING (/api/repack)
+   - Runs 'asar pack' command to repackage modified directory
+   - Creates new app.asar with all modifications
+   - Stores at ~/Documents/RUIE/app.asar
+
+5. INSTALLATION (Multiple options)
+   
+   a) Test (/api/test-launcher)
+      - Temporarily replace launcher app.asar with modified version
+      - User launches the launcher to test changes
+      - If something breaks, original backup is restored
+   
+   b) Deploy (/api/deploy-theme)
+      - Permanently replace launcher app.asar with modified version
+      - Changes persist until launcher is updated or user restores backup
+   
+   c) Restore (/api/restore-backup)
+      - Replace current app.asar with original backup
+      - Reverts all modifications
+
+6. BACKUP/RESTORE
+   - /api/create-backup - Create named backup of extraction
+   - /api/backups-list - List all saved backups
+   - /api/restore-backup - Restore from specific backup
+   - /api/delete-extract - Remove extraction directory
+
+Key Classes and Components:
+
+- ThemeManager: Orchestrates the entire workflow
+  - extract_asar(): Extracts launcher bundle
+  - apply_colors_async(): Applies color changes asynchronously
+  - apply_media(): Applies media file changes
+  - repack_asar(): Repacks modified files
+  - create_backup(): Creates backup of extraction
+  - restore_backup(): Restores from backup
+
+- LauncherDetector: Finds RSI Launcher installation
+  - Searches standard installation locations
+  - Reads launcher configuration
+
+- ColorReplacer: Handles color value substitution
+  - Finds color patterns in JavaScript/CSS
+  - Replaces with new color values
+
+- MediaReplacer: Handles media file replacement
+  - Validates uploaded media files
+  - Copies to correct launcher directories
+
+Security Considerations:
+
+1. Path Traversal Prevention
+   - All file paths validated against LAUNCHER_ROOT_DIR
+   - Symlink attacks prevented with symlink checks
+   - Path components validated (.., . not allowed)
+
+2. File Upload Validation
+   - Only specific file extensions allowed (whitelist)
+   - File sizes limited per category
+   - Filenames checked for path traversal characters
+
+3. Error Handling
+   - Stack traces logged server-side for debugging
+   - Generic error messages returned to client
+   - Prevents information leakage about system paths
+
+4. CORS Security
+   - Only localhost connections allowed
+   - Prevents unauthorized remote access
+
+5. Input Validation
+   - Color mappings validated for format and count
+   - Request bodies checked for required fields
+   - Extraction folder names validated against patterns
+
+Typical User Workflow (via Web UI):
+
+1. User opens RUIE in browser (localhost:5000)
+2. Clicks "Detect Launcher" → /api/init
+3. Clicks "Extract Launcher" → /api/extract
+4. Adjusts colors in UI
+5. Clicks "Apply Colors" → /api/apply-colors
+6. (Optional) Uploads replacement media → /api/upload-media
+7. Clicks "Test Launcher" → /api/test-launcher
+   - Launches RSI Launcher with modifications
+   - User checks if changes look good
+8. If satisfied, clicks "Deploy" → /api/deploy-theme
+   - Changes become permanent in launcher
+9. If not satisfied, clicks "Restore" → /api/restore-backup
+   - Reverts to original launcher
+
+Development/Debugging:
+
+Server logs in console show detailed information:
+- [API] prefix: Normal API operations
+- [API Error] prefix: API errors with full exception details
+- [ThemeManager] prefix: Core workflow operations
+- [ColorReplacer] prefix: Color replacement details
+
+Set PRODUCTION_MODE = False in configuration for:
+- Debug output enabled
+- Stack traces in responses
+- Slower execution but more information
+"""
 
 if __name__ == '__main__':
     # Production deployment with Waitress WSGI server
