@@ -1770,6 +1770,38 @@ def api_test_launcher():
                     'success': False,
                     'error': f'Failed to pack asar: {result.stderr}'
                 }), 500
+
+            def is_safe_launcher_exe(launcher_exe, asar_path):
+                """
+                Basic safety checks to ensure the launcher executable path is not attacker-controlled.
+                """
+                if not isinstance(launcher_exe, str) or not launcher_exe:
+                    return False
+
+                # Require an absolute path
+                if not os.path.isabs(launcher_exe):
+                    return False
+
+                # Disallow obviously dangerous characters often used in injection
+                for ch in [';', '&', '|', '`', '\n', '\r']:
+                    if ch in launcher_exe:
+                        return False
+
+                # Constrain to the same drive / root as the asar file, if possible
+                if isinstance(asar_path, str) and asar_path:
+                    try:
+                        asar_dir = os.path.dirname(os.path.abspath(asar_path))
+                        launcher_dir = os.path.dirname(os.path.abspath(launcher_exe))
+                        # Ensure the launcher executable resides in or under the asar directory's parent
+                        allowed_root = os.path.dirname(asar_dir)
+                        common = os.path.commonpath([allowed_root, launcher_dir])
+                        if common != allowed_root:
+                            return False
+                    except Exception:
+                        # On any path resolution error, be safe and reject
+                        return False
+
+                return True
             
             # Get launcher executable path
             launcher_exe = theme_manager.launcher_info.get('exePath') or theme_manager.launcher_info.get('launcherPath')
@@ -1826,6 +1858,24 @@ def api_test_launcher():
             
             try:
                 # Launch and wait for user to close it
+                if not is_safe_launcher_exe(launcher_exe, asar_path):
+                    try:
+                        if os.path.exists(backup_asar):
+                            shutil.copy2(backup_asar, asar_path)
+                            os.remove(backup_asar)
+                    except Exception:
+                        # If restoration fails, log at server side; client still gets an error
+                        print('[ThemeManager] Failed to restore backup after unsafe launcher path detected')
+                    finally:
+                        try:
+                            os.remove(temp_asar)
+                        except OSError:
+                            pass
+                    return jsonify({
+                        'success': False,
+                        'error': 'Refusing to launch untrusted executable path.'
+                    }), 400
+
                 launcher_process = subprocess.Popen(launcher_exe)
                 
                 # Wait for launcher process to complete
