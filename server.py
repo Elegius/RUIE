@@ -20,6 +20,10 @@ from media_replacer import MediaReplacer
 # Production environment indicator
 PRODUCTION_MODE = True  # Set to True for production deployment
 
+# Base directory under which launcher installations are considered trusted.
+# Adjust this path to match the expected RSI Launcher installation root on the host.
+LAUNCHER_ROOT_DIR = os.path.abspath(os.environ.get('RSI_LAUNCHER_ROOT', os.path.expanduser('~')))
+
 # Determine the base path for resources
 def get_resource_path(relative_path):
     """Get absolute path to resource, works for dev and for PyInstaller."""
@@ -960,11 +964,22 @@ def api_init():
         
         # If asarPath provided, validate and use it directly
         if asar_path:
-            if os.path.exists(asar_path):
+            # Normalize and ensure the asar path is within the trusted launcher root directory
+            asar_path_abs = os.path.abspath(asar_path)
+            try:
+                common_root = os.path.commonpath([asar_path_abs, LAUNCHER_ROOT_DIR])
+            except ValueError:
+                common_root = None
+            if common_root != LAUNCHER_ROOT_DIR:
+                return jsonify({
+                    'success': False,
+                    'error': 'Specified app.asar path is outside the trusted launcher directory'
+                }), 400
+            if os.path.exists(asar_path_abs):
                 launcher_info = {
-                    'asarPath': asar_path,
-                    'directory': os.path.dirname(asar_path),
-                    'resourcesDir': os.path.dirname(asar_path)
+                    'asarPath': asar_path_abs,
+                    'directory': os.path.dirname(asar_path_abs),
+                    'resourcesDir': os.path.dirname(asar_path_abs)
                 }
                 theme_manager.launcher_info = launcher_info
                 return jsonify({
@@ -1880,6 +1895,7 @@ def api_test_launcher():
                     """
                     Additional hardening for launcher executable path:
                     - Require absolute path
+                    - Require both asar and executable to be under the trusted launcher root directory
                     - Require it to reside under the expected resources/asar directory
                     """
                     if not launcher_exe_path:
@@ -1888,6 +1904,13 @@ def api_test_launcher():
                     launcher_exe_abs = os.path.abspath(launcher_exe_path)
                     asar_dir = os.path.dirname(os.path.abspath(asar_path_value)) if asar_path_value else None
                     if not asar_dir:
+                    # Ensure the asar directory itself is under the trusted launcher root
+                    try:
+                        asar_common_root = os.path.commonpath([asar_dir, LAUNCHER_ROOT_DIR])
+                    except ValueError:
+                        return False
+                    if asar_common_root != LAUNCHER_ROOT_DIR:
+                        return False
                         return False
                     # Ensure the launcher executable is within the same tree as the asar directory
                     try:
@@ -1897,7 +1920,13 @@ def api_test_launcher():
                         return False
                     if common != asar_dir:
                         return False
-                    # Finally, ensure it points to an existing file
+                    # Finally, ensure it points to an existing file and is under the trusted root
+                    try:
+                        exe_common_root = os.path.commonpath([launcher_exe_abs, LAUNCHER_ROOT_DIR])
+                    except ValueError:
+                        return False
+                    if exe_common_root != LAUNCHER_ROOT_DIR:
+                        return False
                     return os.path.isfile(launcher_exe_abs)
 
                 if not validate_launcher_exe_path(launcher_exe, asar_path):
