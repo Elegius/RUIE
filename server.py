@@ -156,7 +156,7 @@ def add_security_headers(response):
     
     if PRODUCTION_MODE:
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
-        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     
     # Cache static assets for performance
     if response.content_type and ('image' in response.content_type or 
@@ -167,7 +167,14 @@ def add_security_headers(response):
     return response
 
 # Working directory for extractions, backups, and temporary files
-DOCS_DIR = os.path.expanduser('~/Documents/RUIE')
+# Use AppData\Local on Windows (C:\Users\<username>\AppData\Local\RUIE)
+# This is a public/accessible directory recommended by Windows for app data
+if sys.platform == 'win32':
+    DOCS_DIR = os.path.expanduser('~/AppData/Local/RUIE')
+else:
+    # On macOS/Linux, use ~/.local/share/ruie
+    DOCS_DIR = os.path.expanduser('~/.local/share/ruie')
+
 os.makedirs(DOCS_DIR, exist_ok=True)
 
 # ============================================================================
@@ -202,6 +209,11 @@ MAX_FILE_SIZES = {
 ALLOWED_EXTRACT_PATTERNS = [
     'app-decompiled-',  # Extraction timestamp format
     'app-extracted-'    # Alternative extraction format
+]
+
+# Backup folder naming pattern (prevents arbitrary folder names)
+ALLOWED_BACKUP_PATTERNS = [
+    'backup-'           # Backup timestamp format
 ]
 
 def get_file_category(filename):
@@ -297,22 +309,6 @@ def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
         # Strip whitespace
         requested_path = requested_path.strip()
         
-        # Prevent absolute paths (Windows drive letters, Unix /)
-        if requested_path.startswith('/') or requested_path.startswith('\\'):
-            return False, None, "Absolute paths not allowed"
-        if len(requested_path) > 1 and requested_path[1] == ':':
-            return False, None, "Absolute paths not allowed"
-        
-        # Prevent traversal sequences
-        if '..' in requested_path or requested_path.startswith('.'):
-            return False, None, "Invalid path: contains traversal sequences"
-        
-        # Validate each path component individually
-        path_parts = Path(requested_path).parts
-        for part in path_parts:
-            if part in ('.', '..') or part.startswith('.'):
-                return False, None, "Invalid path component"
-        
         # SECURITY: Validate base_dir is a string and normalize it
         if not isinstance(base_dir, str):
             base_dir = str(base_dir)
@@ -329,8 +325,24 @@ def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
         if base.is_symlink():
             return False, None, "Base directory is a symlink"
         
-        # Now construct requested path relative to base
-        requested = (base / requested_path).resolve()
+        # Check if the requested_path is already an absolute path
+        # If so, resolve it directly and validate it's within base
+        if requested_path.startswith('/') or requested_path.startswith('\\') or (len(requested_path) > 1 and requested_path[1] == ':'):
+            # Absolute path provided - resolve and validate
+            requested = Path(requested_path).resolve()
+        else:
+            # Relative path - construct relative to base
+            # Prevent traversal sequences in relative paths
+            if '..' in requested_path or requested_path.startswith('.'):
+                return False, None, "Invalid path: contains traversal sequences"
+            
+            # Validate each path component individually
+            path_parts = Path(requested_path).parts
+            for part in path_parts:
+                if part in ('.', '..') or part.startswith('.'):
+                    return False, None, "Invalid path component"
+            
+            requested = (base / requested_path).resolve()
         
         # Path must exist (prevents some attack vectors)
         if not requested.exists():
@@ -533,10 +545,12 @@ class ThemeManager:
         
         # Ensure DOCS_DIR exists and is properly set
         docs_dir = os.path.normpath(os.path.expanduser(DOCS_DIR))
+        decompiled_dir = os.path.join(docs_dir, 'Decompiled')
         print(f"[ThemeManager] Extract DOCS_DIR: {docs_dir}")
         os.makedirs(docs_dir, exist_ok=True)
+        os.makedirs(decompiled_dir, exist_ok=True)
         
-        extracted_path = os.path.normpath(os.path.join(docs_dir, f'app-decompiled-{timestamp}'))
+        extracted_path = os.path.normpath(os.path.join(decompiled_dir, f'app-decompiled-{timestamp}'))
         
         try:
             self.set_status('extract', 'running', 'Creating backup...', progress=5, last_error=None)
@@ -663,10 +677,12 @@ class ThemeManager:
         
         # Ensure DOCS_DIR exists
         docs_dir = os.path.normpath(os.path.expanduser(DOCS_DIR))
+        backups_dir = os.path.join(docs_dir, 'Backups')
         print(f"[ThemeManager] Backup DOCS_DIR: {docs_dir}")
         os.makedirs(docs_dir, exist_ok=True)
+        os.makedirs(backups_dir, exist_ok=True)
         
-        self.backup_dir = os.path.join(docs_dir, f'backup-{timestamp}')
+        self.backup_dir = os.path.join(backups_dir, f'backup-{timestamp}')
         
         try:
             print(f"[ThemeManager] Creating backup directory: {self.backup_dir}")
@@ -832,7 +848,10 @@ class ThemeManager:
 
     def cleanup_backups(self, keep_latest=1):
         """Keep only the most recent backups to avoid clutter."""
-        base = Path(DOCS_DIR)
+        base = Path(DOCS_DIR) / 'Backups'
+        if not base.exists():
+            return
+        
         backups = sorted(
             [p for p in base.iterdir() if p.is_dir() and p.name.startswith('backup-')],
             key=lambda p: p.name,
@@ -847,7 +866,10 @@ class ThemeManager:
 
     def cleanup_extractions(self, keep_latest=5):
         """Keep only the most recent extracted folders to avoid clutter."""
-        base = Path(DOCS_DIR)
+        base = Path(DOCS_DIR) / 'Decompiled'
+        if not base.exists():
+            return
+        
         extracts = sorted(
             [p for p in base.iterdir() if p.is_dir() and p.name.startswith('app-extracted-')],
             key=lambda p: p.name,
@@ -1529,6 +1551,10 @@ def api_init():
         launcher_info = LauncherDetector.detect()
         
         if launcher_info:
+            # CRITICAL: Update LAUNCHER_ROOT_DIR based on detected path
+            # This ensures subsequent validation uses the correct security boundary
+            set_launcher_root_from_detected_path(launcher_info)
+            
             # Update theme_manager's launcher_info as well
             theme_manager.launcher_info = launcher_info
             return jsonify({
@@ -1798,7 +1824,7 @@ def api_open_latest_extract():
 def api_extracted_list():
     """List extracted folders for reuse."""
     try:
-        base = Path(DOCS_DIR)
+        base = Path(DOCS_DIR) / 'Decompiled'
         print(f'[API] Checking for extracted folders in: {base}')
         print(f'[API] Base directory exists: {base.exists()}')
         
@@ -2071,8 +2097,8 @@ def api_check_updates():
         import urllib.request
         import json as json_lib
         
-        # Current version from launcher
-        from launcher import APP_VERSION
+        # Current version
+        APP_VERSION = '0.2.0'  # Electron + Flask version
         
         # GitHub API endpoint for latest release
         url = 'https://api.github.com/repos/Elegius/RUIE/releases/latest'
@@ -3046,8 +3072,8 @@ def api_backups():
             print(f'[API Error] Create backup failed: {str(e)}')
             return jsonify({'success': False, 'error': 'Failed to create backup'}), 500
     
-    # GET: List backups - use same directory as extractions
-    backup_dir = os.path.normpath(DOCS_DIR)
+    # GET: List backups - use Backups subdirectory
+    backup_dir = os.path.normpath(os.path.join(DOCS_DIR, 'Backups'))
     backups = []
     
     try:
@@ -3104,8 +3130,8 @@ def api_restore():
 @app.route('/api/delete-backup', methods=['POST'])
 def api_delete_backup():
     """Delete a backup folder."""
-    data = request.json
-    backup_path = data.get('path')
+    data = request.json or {}
+    backup_path = data.get('path', '').strip()
     
     print(f'[API] DELETE /api/delete-backup called with path: {backup_path}')
     
@@ -3113,15 +3139,23 @@ def api_delete_backup():
         print(f'[API] Error: Missing backup path')
         return jsonify({'success': False, 'error': 'Missing backup path'}), 400
     
+    # SECURITY: Validate path safety before any operations
+    is_safe, resolved_path, error_msg = validate_path_safety(
+        backup_path, 
+        DOCS_DIR, 
+        allowed_prefixes=ALLOWED_BACKUP_PATTERNS
+    )
+    
+    if not is_safe:
+        print(f'[API] Path validation failed: {error_msg}')
+        return jsonify({'success': False, 'error': error_msg}), 403
+    
+    path = resolved_path
+    
     try:
-        path = Path(backup_path)
-        if not path.exists():
-            print(f'[API] Error: Backup not found at: {path}')
-            return jsonify({'success': False, 'error': f'Backup not found: {path}'}), 404
-        
         import shutil
         print(f'[API] Deleting backup directory: {path}')
-        shutil.rmtree(path)
+        shutil.rmtree(str(path))
         
         print(f'[API] Successfully deleted backup: {path}')
         return jsonify({
@@ -3321,6 +3355,62 @@ Set PRODUCTION_MODE = False in configuration for:
 - Stack traces in responses
 - Slower execution but more information
 """
+
+# ============================================================================
+# FOLDER BROWSING ENDPOINTS
+# ============================================================================
+
+@app.route('/api/open-backups-folder', methods=['POST'])
+def api_open_backups_folder():
+    """Open the backups folder in system file explorer."""
+    try:
+        import os
+        import subprocess
+        
+        backups_dir = os.path.normpath(os.path.join(DOCS_DIR, 'Backups'))
+        
+        if not os.path.exists(backups_dir):
+            os.makedirs(backups_dir, exist_ok=True)
+        
+        # Open folder in system explorer
+        if sys.platform == 'win32':
+            subprocess.Popen(['explorer', '/select,', backups_dir])
+        elif sys.platform == 'darwin':  # macOS
+            subprocess.Popen(['open', '-R', backups_dir])
+        else:  # Linux
+            subprocess.Popen(['xdg-open', backups_dir])
+        
+        return jsonify({'success': True, 'message': 'Backups folder opened'})
+    except Exception as e:
+        print(f'[API] Error opening backups folder: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/open-extractions-folder', methods=['POST'])
+def api_open_extractions_folder():
+    """Open the extractions folder in system file explorer."""
+    try:
+        import os
+        import subprocess
+        
+        extractions_dir = os.path.normpath(os.path.join(DOCS_DIR, 'Decompiled'))
+        
+        if not os.path.exists(extractions_dir):
+            os.makedirs(extractions_dir, exist_ok=True)
+        
+        # Open folder in system explorer
+        if sys.platform == 'win32':
+            subprocess.Popen(['explorer', '/select,', extractions_dir])
+        elif sys.platform == 'darwin':  # macOS
+            subprocess.Popen(['open', '-R', extractions_dir])
+        else:  # Linux
+            subprocess.Popen(['xdg-open', extractions_dir])
+        
+        return jsonify({'success': True, 'message': 'Extractions folder opened'})
+    except Exception as e:
+        print(f'[API] Error opening extractions folder: {e}')
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # Production deployment with Waitress WSGI server
