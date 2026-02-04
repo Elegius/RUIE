@@ -1955,7 +1955,31 @@ def api_test_launcher():
                         'error': 'Refusing to launch executable outside trusted directory.'
                     }), 400
 
-                launcher_process = subprocess.Popen([launcher_exe])
+                # Validate launcher_exe path just before launching to ensure it is within the trusted launcher root
+                launcher_exe_abs = os.path.abspath(launcher_exe)
+                launcher_root_abs = os.path.abspath(LAUNCHER_ROOT_DIR)
+                try:
+                    common_root = os.path.commonpath([launcher_exe_abs, launcher_root_abs])
+                except ValueError:
+                    common_root = None
+                if common_root != launcher_root_abs:
+                    try:
+                        if os.path.exists(backup_asar):
+                            shutil.copy2(backup_asar, asar_path)
+                            os.remove(backup_asar)
+                    except Exception as e:
+                        print(f'[ThemeManager] Failed to restore backup after invalid launcher executable detected: {e}')
+                    finally:
+                        try:
+                            os.remove(temp_asar)
+                        except OSError:
+                            pass
+                    return jsonify({
+                        'success': False,
+                        'error': 'Refusing to launch executable outside trusted directory.'
+                    }), 400
+
+                launcher_process = subprocess.Popen([launcher_exe_abs])
                 
                 # Wait for launcher process to complete
                 def restore_after_process_exit():
