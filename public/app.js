@@ -2641,19 +2641,57 @@ function renderMusicList() {
         return;
     }
 
-    musicList.innerHTML = state.music.map((track, index) => `
-        <div class="music-item" data-index="${index}">
-            <div class="music-item-order">${index + 1}</div>
-            <div class="music-item-name">
-                ${track.name}
-                ${track.isDefault ? '<span style="color: #00d4ff; font-size: 12px;"> (default)</span>' : '<span style="color: #80d0ff; font-size: 12px;"> (custom)</span>'}
-            </div>
-            <div class="music-item-controls">
-                <button onclick="playMusicTrack(${index})" title="Play">▶</button>
-                <button class="remove-btn" onclick="removeMusicFile(${index})" title="Remove">✕</button>
-            </div>
-        </div>
-    `).join('');
+    // Clear and rebuild using DOM methods to prevent XSS
+    musicList.innerHTML = '';
+    const fragment = document.createDocumentFragment();
+    
+    state.music.forEach((track, index) => {
+        const item = document.createElement('div');
+        item.className = 'music-item';
+        item.setAttribute('data-index', index);
+        
+        const order = document.createElement('div');
+        order.className = 'music-item-order';
+        order.textContent = index + 1;
+        item.appendChild(order);
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'music-item-name';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = track.name;
+        nameDiv.appendChild(nameSpan);
+        
+        const tagSpan = document.createElement('span');
+        tagSpan.style.color = track.isDefault ? '#00d4ff' : '#80d0ff';
+        tagSpan.style.fontSize = '12px';
+        tagSpan.textContent = track.isDefault ? ' (default)' : ' (custom)';
+        nameDiv.appendChild(tagSpan);
+        
+        item.appendChild(nameDiv);
+        
+        const controls = document.createElement('div');
+        controls.className = 'music-item-controls';
+        
+        const playBtn = document.createElement('button');
+        playBtn.textContent = '▶';
+        playBtn.title = 'Play';
+        playBtn.onclick = () => playMusicTrack(index);
+        
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'remove-btn';
+        removeBtn.textContent = '✕';
+        removeBtn.title = 'Remove';
+        removeBtn.onclick = () => removeMusicFile(index);
+        
+        controls.appendChild(playBtn);
+        controls.appendChild(removeBtn);
+        item.appendChild(controls);
+        
+        fragment.appendChild(item);
+    });
+    
+    musicList.appendChild(fragment);
 }
 
 /**
