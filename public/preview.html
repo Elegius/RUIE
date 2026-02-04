@@ -542,14 +542,18 @@
   </div>
 
   <script>
-    // Simple URL validation to prevent dangerous schemes like "javascript:".
-    function isSafeUrl(url) {
-      if (typeof url !== 'string') return false;
+    // Simple URL validation and normalization to prevent dangerous schemes like "javascript:".
+    // Returns a normalized safe URL string, or null if the URL is not allowed.
+    function getSafeUrl(url) {
+      if (typeof url !== 'string') return null;
       try {
         const parsed = new URL(url, window.location.href);
-        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+        if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+          return parsed.href;
+        }
+        return null;
       } catch (e) {
-        return false;
+        return null;
       }
     }
 
@@ -583,14 +587,15 @@
           if (!nodes.length) return;
 
           nodes.forEach((node) => {
-            if (!isSafeUrl(value)) {
+            const safeValue = getSafeUrl(value);
+            if (!safeValue) {
               return;
             }
 
             if (node.tagName === 'IMG') {
-              node.src = value;
+              node.src = safeValue;
             } else if (node.dataset.assetType === 'background') {
-              node.style.backgroundImage = `url('${value}')`;
+              node.style.backgroundImage = `url('${safeValue}')`;
               const placeholderEl = document.getElementById('background-placeholder');
               if (placeholderEl) placeholderEl.style.display = 'none';
             }
