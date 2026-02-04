@@ -165,9 +165,10 @@ function createWindow() {
   
   mainWindow.loadURL(url);
   
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // DevTools disabled for now - can be re-enabled if needed
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
   
   mainWindow.on('closed', () => {
     mainWindow = null;
