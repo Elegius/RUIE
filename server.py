@@ -294,8 +294,23 @@ def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
             if part in ('.', '..') or part.startswith('.'):
                 return False, None, "Invalid path component"
         
+        # SECURITY: Validate base_dir is a string and normalize it
+        if not isinstance(base_dir, str):
+            base_dir = str(base_dir)
+        
         # SAFER APPROACH: Construct path by joining with base, not resolving user path alone
-        base = Path(base_dir).resolve()
+        # Resolve base_dir first and validate it has no dangerous patterns
+        base = Path(base_dir).expanduser().resolve(strict=False)
+        
+        # Verify base_dir itself doesn't contain symlinks that could be used for attacks
+        for parent in base.parents:
+            if parent.is_symlink():
+                return False, None, "Base directory contains symlinks"
+        
+        if base.is_symlink():
+            return False, None, "Base directory is a symlink"
+        
+        # Now construct requested path relative to base
         requested = (base / requested_path).resolve()
         
         # Path must exist (prevents some attack vectors)
@@ -1125,8 +1140,21 @@ def api_music(filename):
     if not music_dir:
         return jsonify({'success': False, 'error': 'Music directory not found'}), 404
 
+    # SECURITY: Extract only the filename to prevent path traversal
     safe_name = Path(filename).name
+    
+    # Validate filename doesn't contain dangerous patterns
+    if not safe_name or '..' in safe_name or safe_name.startswith('.'):
+        return jsonify({'success': False, 'error': 'Invalid filename'}), 403
+    
     file_path = music_dir / safe_name
+    
+    # Additional validation: ensure resulting path is actually within music_dir
+    try:
+        file_path.resolve().relative_to(music_dir.resolve())
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    
     if not file_path.exists():
         return jsonify({'success': False, 'error': 'Music file not found'}), 404
 
@@ -1140,8 +1168,21 @@ def api_music_file(filename):
     if not music_dir:
         return jsonify({'success': False, 'error': 'Music directory not found'}), 404
 
+    # SECURITY: Extract only the filename to prevent path traversal
     safe_name = Path(filename).name
+    
+    # Validate filename doesn't contain dangerous patterns
+    if not safe_name or '..' in safe_name or safe_name.startswith('.'):
+        return jsonify({'success': False, 'error': 'Invalid filename'}), 403
+    
     file_path = music_dir / safe_name
+    
+    # Additional validation: ensure resulting path is actually within music_dir
+    try:
+        file_path.resolve().relative_to(music_dir.resolve())
+    except ValueError:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    
     if not file_path.exists():
         return jsonify({'success': False, 'error': 'Music file not found'}), 404
 
@@ -1663,10 +1704,11 @@ def api_extract():
             }), 500
         
         print("[API] Extraction successful")
+        # SECURITY: Don't expose filesystem paths to client (information disclosure)
+        # Extracted files are internal server state; client doesn't need the paths
         return jsonify({
             'success': True,
-            'extractedPath': theme_manager.extracted_dir,
-            'backupPath': theme_manager.backup_dir
+            'message': 'App.asar extracted successfully'
         })
     except Exception as e:
         print(f'[API Error] Extract failed: {str(e)}')
@@ -1680,20 +1722,28 @@ def api_open_latest_extract():
     if not theme_manager.extracted_dir:
         return jsonify({'success': False, 'error': 'No extracted folder found'}), 400
 
-    path = Path(theme_manager.extracted_dir)
+    # SECURITY: Validate extracted_dir before any path operations
+    extracted_dir_str = str(theme_manager.extracted_dir)
+    
+    # Pre-validation: reject dangerous patterns
+    if not isinstance(extracted_dir_str, str) or not extracted_dir_str:
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    if extracted_dir_str.startswith('/') or extracted_dir_str.startswith('\\'):
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    if '..' in extracted_dir_str or extracted_dir_str.startswith('.'):
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    
+    # Check for symlinks in extracted_dir BEFORE resolving
+    path = Path(extracted_dir_str)
+    if path.exists() and path.is_symlink():
+        return jsonify({'success': False, 'error': 'Invalid path'}), 403
+    
     if not path.exists():
         return jsonify({'success': False, 'error': 'Extracted folder does not exist'}), 404
 
     try:
         # SECURITY: Validate path is within trusted launcher root
         launcher_root = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
-        
-        # Validate extracted_dir components BEFORE using
-        extracted_dir_str = str(theme_manager.extracted_dir)
-        if extracted_dir_str.startswith('/') or extracted_dir_str.startswith('\\'):
-            return jsonify({'success': False, 'error': 'Invalid path'}), 403
-        if '..' in extracted_dir_str:
-            return jsonify({'success': False, 'error': 'Invalid path'}), 403
         
         # Resolve and check boundaries
         path_resolved = path.expanduser().resolve(strict=False)
