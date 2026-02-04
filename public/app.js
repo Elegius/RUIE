@@ -1,7 +1,44 @@
+/**
+ * RUIE Main Application JavaScript
+ * ================================
+ * 
+ * This is the main client-side JavaScript for the RUIE web application.
+ * 
+ * Architecture:
+ * - Single-page application (SPA) with 6 steps
+ * - Communicates with Flask backend via REST API
+ * - Uses HTML5 FileReader API for file handling
+ * - iFrame-based live preview system
+ * - State management for form data
+ * 
+ * The 6 Steps:
+ * 1. Launcher Detection & ASAR Selection
+ * 2. Color Customization (17 presets + manual colors)
+ * 3. Media Replacement (images, videos, audio)
+ * 4. Music / Audio Management
+ * 5. Backup & Recovery
+ * 6. Review & Deploy
+ * 
+ * Key Features:
+ * - Live preview of theme changes
+ * - Color format conversion (hex/RGB)
+ * - Media file validation
+ * - Backup/restore functionality
+ * - Multi-format color support
+ */
+
 // Initialize early to check if script is loading
 console.log('[app.js] Script loaded at', new Date().toISOString());
 
-// Function to send debug logs to server
+/**
+ * Send debug logs to the backend server
+ * 
+ * Useful for tracking user actions and debugging client-side issues
+ * on the server side. Logs are stored in ~/Documents/RUIE-debug.log
+ * 
+ * @param {string} message - Log message to send
+ * @param {string} level - Log level: 'INFO', 'ERROR', 'WARNING', 'DEBUG'
+ */
 function sendDebugToServer(message, level = 'INFO') {
     try {
         fetch('/api/debug-log', {
@@ -14,13 +51,20 @@ function sendDebugToServer(message, level = 'INFO') {
     }
 }
 
-// Send initial load message
+// Send initial load message to server
 sendDebugToServer('app.js loaded successfully');
 
-// Global error handler
+/**
+ * Global error handler for uncaught exceptions
+ * 
+ * Catches errors that escape try-catch blocks and displays them
+ * on screen in a red error box for user visibility, plus logs to server
+ */
 window.addEventListener('error', function(event) {
     console.error('[GLOBAL ERROR]', event.filename, event.lineno, event.message);
     sendDebugToServer(`ERROR at ${event.filename}:${event.lineno} - ${event.message}`, 'ERROR');
+    
+    // Create or update error display box
     const errorDiv = document.getElementById('error-display') || (function() {
         const div = document.createElement('div');
         div.id = 'error-display';
@@ -31,10 +75,17 @@ window.addEventListener('error', function(event) {
     errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\n${event.filename}:${event.lineno} ${event.message}`;
 });
 
-// Global unhandled promise rejection handler  
+/**
+ * Global handler for unhandled promise rejections
+ * 
+ * Catches promises that reject without a .catch() handler
+ * and displays them for debugging
+ */
 window.addEventListener('unhandledrejection', function(event) {
     console.error('[UNHANDLED REJECTION]', event.reason);
     sendDebugToServer(`UNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`, 'ERROR');
+    
+    // Create or update error display box
     const errorDiv = document.getElementById('error-display') || (function() {
         const div = document.createElement('div');
         div.id = 'error-display';
@@ -45,34 +96,65 @@ window.addEventListener('unhandledrejection', function(event) {
     errorDiv.innerHTML = (errorDiv.innerHTML || 'ERRORS:') + `\nUNHANDLED REJECTION: ${event.reason?.message || String(event.reason)}`;
 });
 
-// Global state
+/**
+ * Global application state object
+ * 
+ * Stores all form data, selections, and configuration
+ * that persists across page navigations
+ */
 const state = {
-    initialized: false,
-    extracted: false,
-    colors: {}, // Will be initialized after preset files are loaded
-    media: {},
-    music: [], // Array of music files: [{ name: 'track1.ogg', file: File }, ...]
+    // Extraction and initialization state
+    initialized: false,       // Whether ASAR has been extracted
+    extracted: false,         // Whether extract directory is available
+    
+    // Color customization
+    colors: {},               // Current color selections (will be populated from presets)
+    
+    // Media files
+    media: {},                // User-selected media files
+    music: [],                // Array of music files: [{ name: 'track1.ogg', file: File }, ...]
+    
+    // Current configuration
     config: {
-        name: 'My Theme',
-        colors: {},
-        media: {},
-        music: []
+        name: 'My Theme',     // Theme name
+        colors: {},           // Color overrides
+        media: {},            // Media selections
+        music: []             // Music files
     },
-    currentPage: 1,
-    selectedExtractPath: null // Track selected extract for "Use Selected" button
+    
+    // Navigation state
+    currentPage: 1,           // Current step (1-6)
+    selectedExtractPath: null // Track selected extraction for "Use Selected" button
 };
 
-// Persisted preview state for syncing across steps/iframes
+/**
+ * Persisted preview state
+ * 
+ * This state syncs between all preview iframes so they all show
+ * the same theme even when the user navigates between steps
+ */
 const previewState = {
-    colors: {},
-    media: {}
+    colors: {},  // Current color settings
+    media: {}    // Current media settings
 };
 
-// DOM element cache for performance
+/**
+ * DOM element cache for performance
+ * 
+ * Instead of repeatedly querying the DOM, we cache references to
+ * frequently accessed elements. This is initialized by calling DOM.init()
+ * once the page is ready.
+ */
 const DOM = {
+    // Page navigation
     pages: null,
     stepperSteps: null,
+    
+    // Preview iframes
     previewFrame: null,
+    previewFrames: null,
+    
+    // Step 1 - Launcher/ASAR selection
     asarPath: null,
     extractProgress: null,
     extractProgressBar: null,
@@ -81,18 +163,41 @@ const DOM = {
     extractStatus: null,
     extractSelect: null,
     initStatus: null,
+    
+    // Step 2 - Colors
     colorList: null,
+    
+    // Step 4 - Music
+    musicList: null,
+    
+    // Step 3 - Media
+    mediaAssetPicker: null,
+    mediaFilter: null,
+    
+    // Navigation buttons
     backBtn: null,
     nextBtn: null,
+    
+    /**
+     * Initialize DOM element cache
+     * 
+     * Call this once after the DOM is ready to populate the cache.
+     * This reduces repeated DOM queries for better performance.
+     */
     init() {
         console.log('[DOM.init] Starting DOM initialization, document.readyState:', document.readyState);
         console.log('[DOM.init] document.body exists:', !!document.body);
         console.log('[DOM.init] asarPath element found:', !!document.getElementById('asarPath'));
         
+        // Cache all page and step elements
         this.pages = document.querySelectorAll('.page');
         this.stepperSteps = document.querySelectorAll('.stepper-step');
+        
+        // Cache preview iframes
         this.previewFrame = document.getElementById('previewFrame');
         this.previewFrames = document.querySelectorAll('.preview-frame');
+        
+        // Cache step-specific elements
         this.asarPath = document.getElementById('asarPath');
         this.extractProgress = document.getElementById('extract-progress');
         this.extractProgressBar = document.getElementById('extract-progress-bar');
@@ -110,7 +215,7 @@ const DOM = {
 
         console.log('[DOM.init] DOM elements cached - asarPath:', !!this.asarPath, 'initStatus:', !!this.initStatus);
 
-        // Sync preview state when any preview iframe loads
+        // Setup preview frame sync: when any preview iframe loads, send current state to it
         this.previewFrames.forEach((frame) => {
             frame.addEventListener('load', () => {
                 sendPreviewStateToFrame(frame);
@@ -119,10 +224,17 @@ const DOM = {
     }
 };
 
-// Debounce preview updates to reduce reflows during rapid input
-const debouncedUpdatePreview = debounce(updatePreviewFromUi, 150);
-
-// Debounce helper for performance
+/**
+ * Debounce helper for performance optimization
+ * 
+ * Delays function execution until the user stops performing an action,
+ * reducing the number of times the function is called. Useful for
+ * expensive operations like preview updates while the user types.
+ * 
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Milliseconds to wait before executing
+ * @returns {Function} Debounced function
+ */
 function debounce(func, wait) {
     let timeout;
     return function executedFunction(...args) {
@@ -135,7 +247,20 @@ function debounce(func, wait) {
     };
 }
 
-// Page navigation system
+// Debounce preview updates to reduce reflows during rapid input
+const debouncedUpdatePreview = debounce(updatePreviewFromUi, 150);
+
+/**
+ * Navigate to a specific step in the wizard
+ * 
+ * Handles:
+ * - Showing/hiding pages
+ * - Updating stepper UI
+ * - Loading step-specific data
+ * - Syncing preview state
+ * 
+ * @param {number} pageNumber - Step number (1-6)
+ */
 function navigateToPage(pageNumber) {
     // Hide all pages using cached elements
     DOM.pages.forEach(page => page.style.display = 'none');
@@ -151,8 +276,9 @@ function navigateToPage(pageNumber) {
         // Sync preview state to the active iframe on step change
         sendPreviewStateToFrame(getActivePreviewFrame());
         
-        // Load ASAR and Backup lists when navigating to step 1
+        // Load data specific to each step
         if (pageNumber === 1) {
+            // Step 1: Load list of extracted ASAR files and backups
             setTimeout(() => {
                 console.log('[navigateToPage] Loading ASAR and Backup lists for page 1');
                 loadExtractedASARList().catch(e => console.error('Error loading extracts on page 1:', e));
@@ -160,13 +286,11 @@ function navigateToPage(pageNumber) {
             }, 100);
         }
         
-        // Render color mappings when navigating to colors page
         if (pageNumber === 2) {
-            // Show loading message
+            // Step 2: Render color selection interface
             if (DOM.colorList) {
                 DOM.colorList.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Loading color palette...</div>';
             }
-            // Render after UI updates and update preview
             setTimeout(() => {
                 renderColorMappings();
                 // Update preview with current colors from UI
@@ -177,16 +301,16 @@ function navigateToPage(pageNumber) {
             }, 50);
         }
         
-        // Load media assets when navigating to media page
         if (pageNumber === 3) {
+            // Step 3: Load media assets (images, videos, audio)
             if (lastMediaAssets.length === 0) {
                 loadDefaultMediaAssets();
             }
             // Colors already synced via sendPreviewStateToFrame at top of function
         }
         
-        // Initialize music list when navigating to music page
         if (pageNumber === 4) {
+            // Step 4: Initialize music playlist
             if (state.music.length === 0) {
                 loadDefaultMusic();
             } else {

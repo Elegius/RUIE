@@ -1,3 +1,24 @@
+"""
+RUIE Launcher - Main Application Entry Point
+=============================================
+
+This module serves as the main desktop application launcher for RUIE (RSI Launcher UI Editor).
+It handles:
+- Desktop GUI using PyQt5
+- Web server management (Flask + Waitress)
+- Admin privilege elevation for system file modifications
+- Debug console for troubleshooting
+- Loading screen with progress feedback
+
+The application uses a hybrid approach:
+1. PyQt5 provides the native Windows desktop window
+2. Flask provides a REST API backend
+3. HTML/JavaScript provides the user interface (served through Flask)
+4. WebEngine displays the web UI inside the desktop window
+
+Development Note: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5)
+"""
+
 import sys
 import os
 import subprocess
@@ -13,10 +34,11 @@ from PyQt5.QtCore import QUrl, QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QIcon, QFont
 import waitress  # Required for production WSGI server - must be at module level for PyInstaller
 
-# Version info
-APP_VERSION = "0.2 Alpha"
-APP_NAME = "RUIE"
-# Development Note: This application was developed with AI assistance using GitHub Copilot (Claude Haiku 4.5)
+# ============================================================================
+# APPLICATION METADATA
+# ============================================================================
+APP_VERSION = "0.2 Alpha"  # Current application version
+APP_NAME = "RUIE"  # Application name (RSI Launcher UI Editor)
 
 # SECURITY: Determine if running in production (frozen exe)
 PRODUCTION_BUILD = getattr(sys, 'frozen', False)

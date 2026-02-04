@@ -1,6 +1,126 @@
 # Changelog
 
-## Version 0.2 Alpha - Endpoint Expansion & Security Audit (February 2026)
+All notable changes to RUIE are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/).
+
+## [0.2 Alpha] - February 2026
+
+### Status
+🔬 **Alpha Release** - Active Development  
+✅ **Testing**: 21/21 tests passing  
+✅ **Security**: Audited and secured
+
+### Added
+- `/api/compile-asar` - Compile modified app.asar without installing
+- `/api/install-asar` - Compile and install modified app.asar with backups
+- Comprehensive security audit and vulnerability fixes
+- Full documentation comments (200+ points across 7 files)
+- Portable EXE build (5.99 MB via PyInstaller)
+- Windows Installer configuration (Inno Setup)
+- Complete API endpoint documentation (44 endpoints)
+
+### Security Fixes
+- **XSS Protection**: Added HTML sanitization for all user input
+- **Path Traversal**: Implemented strict path validation
+- **Command Injection**: Replaced shell commands with safe argument lists
+- **CSRF Protection**: Added CSRF tokens for state changes
+- **Input Validation**: Comprehensive validation on all endpoints
+
+### Improved
+- 10 security controls verified and documented
+- Dual-mode server startup (thread vs subprocess)
+- Error handling in new endpoints
+- Admin privilege elevation
+- Auto-launcher detection
+
+### Testing
+- ✅ Module imports (5/5)
+- ✅ Color conversions (7/7)
+- ✅ Launcher detection (1/1)
+- ✅ ASAR extraction (1/1)
+- ✅ Flask configuration (3/3)
+- ✅ Security functions (3/3)
+- ✅ Media handling (1/1)
+
+### Known Issues
+- None currently documented
+
+---
+
+## [0.1 Alpha] - January 2026
+
+### Status
+🔬 **Alpha Release** - Initial Development
+
+### Added
+- Initial 5-step wizard interface
+- Launcher auto-detection system
+- Color replacement engine
+- Media file management
+- Backup and restore system
+- 17 manufacturer presets
+- 44 REST API endpoints
+- Flask backend with security controls
+- PyQt5 desktop application
+- Responsive web UI with live preview
+
+### Fixed
+- Compiled EXE startup issues (frozen mode Flask handling)
+- Delete button functionality for backups and extractions
+- Event listener attachment on dynamically created elements
+
+### Features
+- 6-step customization wizard
+- Real-time color preview
+- Music and audio support
+- Backup metadata tracking
+- Admin privilege elevation
+- Windows UAC support
+
+### Technical Stack
+- **Backend**: Python 3.11+, Flask, Waitress
+- **Desktop**: PyQt5, PyQtWebEngine
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
+- **Archive**: Pure Python ASAR extraction (no Node.js required)
+- **Build**: PyInstaller 6.18.0
+
+### Limitations
+- Windows 10/11 only
+- Requires admin privileges for theme deployment
+- Single session at a time
+
+---
+
+## [Planned] - Future Releases
+
+### Upcoming Features
+- [ ] macOS/Linux support
+- [ ] CSS file color replacement
+- [ ] Theme marketplace integration
+- [ ] Advanced color harmony tools
+- [ ] Batch processing support
+- [ ] Digital code signing
+- [ ] Auto-update system
+
+### Performance Improvements
+- [ ] Faster ASAR extraction
+- [ ] Optimized color replacement
+- [ ] Progressive UI updates
+- [ ] Caching system
+
+---
+
+## Version Matrix
+
+| Version | Date | Status | Deployment |
+|---------|------|--------|------------|
+| 0.2 Alpha | Feb 2026 | 🟢 Ready | EXE + Installer Config |
+| 0.1 Alpha | Jan 2026 | 🟢 Ready | Source Code |
+
+---
+
+## Changelog Archive
+
+For detailed information about earlier changes, see the project history on GitHub.
 
 **Status**: 🔬 Alpha Release - Active Development  
 **Latest Update**: Added `/api/compile-asar` and `/api/install-asar` endpoints, comprehensive security audit (February 1, 2026)

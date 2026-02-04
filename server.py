@@ -595,7 +595,8 @@ class ThemeManager:
                     for match in pattern.finditer(content):
                         key, value = match.groups()
                         metadata['original_colors'][key] = value.strip()
-                except:
+                except Exception:
+                    # Safely ignore pattern matching errors
                     pass
             
             # Store original media file sizes as baseline
@@ -608,7 +609,8 @@ class ThemeManager:
                             file_size = os.path.getsize(file_path)
                             rel_path = os.path.relpath(file_path, self.extracted_dir)
                             metadata['media_files'][rel_path] = {'size': file_size}
-                        except:
+                        except Exception:
+                            # Safely ignore file metadata errors
                             pass
             
             # Save metadata
@@ -654,7 +656,8 @@ class ThemeManager:
                                 'original': original_value,
                                 'current': current_value
                             }
-                except:
+                except Exception:
+                    # Safely ignore color value retrieval errors
                     pass
             
             # Check for media file changes (by comparing sizes)
@@ -675,7 +678,8 @@ class ThemeManager:
                                     'original_size': original_info.get('size'),
                                     'current_size': current_size
                                 }
-                        except:
+                        except Exception:
+                            # Safely ignore media file change detection errors
                             pass
             
             return changes if (changes['colors'] or changes['media']) else None
@@ -1803,7 +1807,8 @@ def api_test_launcher():
             except PermissionError:
                 try:
                     os.remove(temp_asar)
-                except:
+                except OSError:
+                    # Safely ignore temp file cleanup errors
                     pass
                 return jsonify({
                     'success': False,
@@ -1812,7 +1817,8 @@ def api_test_launcher():
             except Exception as e:
                 try:
                     os.remove(temp_asar)
-                except:
+                except OSError:
+                    # Safely ignore temp file cleanup errors
                     pass
                 return jsonify({
                     'success': False,
@@ -1840,7 +1846,8 @@ def api_test_launcher():
                     finally:
                         try:
                             os.remove(temp_asar)
-                        except:
+                        except OSError:
+                            # Safely ignore temp file cleanup errors
                             pass
                 
                 restore_thread = threading.Thread(target=restore_after_process_exit, daemon=True)
@@ -1855,7 +1862,11 @@ def api_test_launcher():
                 try:
                     if os.path.exists(backup_asar):
                         shutil.copy2(backup_asar, asar_path)
-                        os.remove(backup_asar)
+                except OSError:
+                    # Safely ignore backup restoration errors
+                    pass
+                try:
+                    os.remove(backup_asar)
                 except:
                     pass
                 raise e
@@ -1902,7 +1913,8 @@ def api_compile_asar():
             if result.returncode != 0:
                 try:
                     os.remove(output_asar)
-                except:
+                except OSError:
+                    # Safely ignore output file cleanup errors
                     pass
                 return jsonify({
                     'success': False,
@@ -1987,7 +1999,8 @@ def api_install_asar():
                 if result.returncode != 0:
                     try:
                         os.remove(temp_asar)
-                    except:
+                    except OSError:
+                        # Safely ignore temp file cleanup errors
                         pass
                     return jsonify({
                         'success': False,
@@ -2001,7 +2014,8 @@ def api_install_asar():
                 except PermissionError:
                     try:
                         os.remove(temp_asar)
-                    except:
+                    except OSError:
+                        # Safely ignore temp file cleanup errors
                         pass
                     return jsonify({
                         'success': False,
@@ -2010,7 +2024,8 @@ def api_install_asar():
                 finally:
                     try:
                         os.remove(temp_asar)
-                    except:
+                    except OSError:
+                        # Safely ignore temp file cleanup errors
                         pass
                 
                 return jsonify({
@@ -2152,9 +2167,11 @@ def api_config_list():
                                 'colorCount': len(theme_data.get('colors', {})),
                                 'mediaCount': len(theme_data.get('media', []))
                             })
-                    except:
+                    except Exception:
+                        # Safely ignore theme metadata errors
                         pass
-    except:
+    except Exception:
+        # Safely ignore theme loading errors
         pass
     
     return jsonify({
