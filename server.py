@@ -1934,11 +1934,12 @@ def api_test_launcher():
                         if os.path.exists(backup_asar):
                             # Validate asar_path before restoring backup to avoid using an uncontrolled path
                             asar_path_abs = os.path.abspath(asar_path)
+                            launcher_root_abs = os.path.abspath(LAUNCHER_ROOT_DIR)
                             try:
-                                common_root = os.path.commonpath([asar_path_abs, LAUNCHER_ROOT_DIR])
+                                common_root = os.path.commonpath([asar_path_abs, launcher_root_abs])
                             except ValueError:
                                 common_root = None
-                            if common_root != LAUNCHER_ROOT_DIR:
+                            if common_root != launcher_root_abs:
                                 raise ValueError("Refusing to restore backup outside trusted launcher directory")
                             shutil.copy2(backup_asar, asar_path_abs)
                             os.remove(backup_asar)
