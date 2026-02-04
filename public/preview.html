@@ -542,6 +542,17 @@
   </div>
 
   <script>
+    // Simple URL validation to prevent dangerous schemes like "javascript:".
+    function isSafeUrl(url) {
+      if (typeof url !== 'string') return false;
+      try {
+        const parsed = new URL(url, window.location.href);
+        return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+      } catch (e) {
+        return false;
+      }
+    }
+
     // Listen for color and media updates from parent
     window.addEventListener('message', (event) => {
       if (!event.data) return;
@@ -572,6 +583,10 @@
           if (!nodes.length) return;
 
           nodes.forEach((node) => {
+            if (!isSafeUrl(value)) {
+              return;
+            }
+
             if (node.tagName === 'IMG') {
               node.src = value;
             } else if (node.dataset.assetType === 'background') {
