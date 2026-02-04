@@ -1,6 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
 const isDev = require('electron-is-dev');
 const axios = require('axios');
 
@@ -10,6 +10,34 @@ const FLASK_URL = 'http://127.0.0.1:5000';
 const FLASK_PORT = 5000;
 const HEALTH_CHECK_INTERVAL = 1000;
 const HEALTH_CHECK_TIMEOUT = 30000;
+const ELEVATION_FLAG = '--ruie-elevated';
+
+function isRunningAsAdminWindows() {
+  try {
+    execSync('net session', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function relaunchAsAdminWindows() {
+  const args = process.argv.slice(1);
+  if (!args.includes(ELEVATION_FLAG)) {
+    args.push(ELEVATION_FLAG);
+  }
+
+  const escapedArgs = args
+    .map((a) => `"${String(a).replace(/"/g, '\\"')}"`)
+    .join(' ');
+
+  const command = `Start-Process -FilePath \"${process.execPath}\" -Verb RunAs -ArgumentList \"${escapedArgs}\"`;
+  return spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true
+  }).unref();
+}
 
 /**
  * Check if Flask server is running
@@ -153,6 +181,31 @@ function createWindow() {
  */
 app.on('ready', async () => {
   try {
+    if (process.platform === 'win32') {
+      const isAdmin = isRunningAsAdminWindows();
+      const isElevatedAttempt = process.argv.includes(ELEVATION_FLAG);
+
+      if (!isAdmin && !isElevatedAttempt) {
+        console.log('[ELECTRON] Not running as admin, relaunching elevated...');
+        relaunchAsAdminWindows();
+        dialog.showErrorBox(
+          'Administrator Required',
+          'RUIE needs administrator privileges to run. Please approve the UAC prompt.'
+        );
+        app.quit();
+        return;
+      }
+
+      if (!isAdmin && isElevatedAttempt) {
+        dialog.showErrorBox(
+          'Administrator Required',
+          'Administrator privileges were not granted. Please relaunch and approve the UAC prompt.'
+        );
+        app.quit();
+        return;
+      }
+    }
+
     console.log('[ELECTRON] App ready, starting Flask server...');
     await startFlaskServer();
     console.log('[ELECTRON] Flask server started, creating window...');

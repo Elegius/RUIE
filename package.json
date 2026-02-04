@@ -10,7 +10,7 @@
     "start": "electron .",
     "dev": "electron . --development",
     "build": "electron-builder",
-    "build:win": "electron-builder --win --publish never",
+    "build:win": "powershell -NoProfile -ExecutionPolicy Bypass -Command \"$env:CSC_IDENTITY_AUTO_DISCOVERY='false'; $env:ELECTRON_BUILDER_CACHE = (Join-Path $PWD '.electron-builder-cache'); if (!(Test-Path $env:ELECTRON_BUILDER_CACHE)) { New-Item -ItemType Directory -Path $env:ELECTRON_BUILDER_CACHE | Out-Null }; electron-builder --win --publish never\"",
     "build:win-portable": "electron-builder --win portable --publish never",
     "pack": "electron-builder --dir",
     "prestart": "npm run ensure-python-server",
@@ -39,6 +39,7 @@
       "node_modules/**/*"
     ],
     "win": {
+      "signAndEditExecutable": false,
       "target": [
         {
           "target": "nsis",
@@ -52,14 +53,7 @@
             "x64"
           ]
         }
-      ],
-      "certificateFile": null,
-      "certificatePassword": null,
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "sign": "./customSign.js",
-      "rfc3161TimeStampServer": "http://timestamp.comodoca.com"
+      ]
     },
     "nsis": {
       "oneClick": false,

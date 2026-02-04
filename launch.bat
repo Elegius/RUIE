@@ -1,8 +1,15 @@
 @echo off
-REM RUIE - Electron + Flask App Launcher
-REM This batch file launches the RUIE theme customization app
+REM RUIE - Electron + Flask App Launcher (Admin required)
 
 cd /d "%~dp0"
+
+REM Check if running as admin
+net session >nul 2>&1
+if %errorlevel% neq 0 (
+    echo Requesting administrator privileges...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '%~f0' -Verb RunAs"
+    exit /b
+)
 
 REM Check if npm is installed
 where npm >nul 2>&1

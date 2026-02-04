@@ -62,11 +62,14 @@ rm media_replacer.py          # Check if still needed*
 ```
 
 *Keep helper scripts if they're used by server.py
+Status: ✅ Completed (deprecated files removed; helper scripts retained)
 
 ### 5. Build for Windows Distribution
 ```bash
 npm run build:win
 ```
+
+Status: ✅ Completed (build succeeded after disabling signing/rcedit)
 
 Output files appear in `dist/`:
 - `RUIE Setup 1.0.0.exe` - Installer (users can uninstall)
@@ -112,6 +115,6 @@ When ready to release:
 | Electron Setup | ✓ Ready | main.js, preload.js created |
 | Package.json | ✓ Ready | Build scripts configured |
 | Flask Server | ✓ Unchanged | server.py works as-is |
-| UI/Frontend | ⏳ Ready | public/ folder unchanged |
+| UI/Frontend | ✓ Updated | public/ folder updated and functional |
 | PyQt5 Code | ✗ Deprecated | launcher.py can be deleted |
-| Build System | ⏳ Pending | Build not run yet |
+| Build System | ✓ Built | NSIS + portable executables generated |
