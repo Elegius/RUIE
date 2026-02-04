@@ -1369,7 +1369,11 @@ async function loadBackupsList() {
         });
     } catch (error) {
         console.error('Error loading backups:', error);
-        backupsList.innerHTML = `<div class="backup-item-empty">Error: ${error.message}</div>`;
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'backup-item-empty';
+        errorDiv.textContent = `Error: ${error.message}`;
+        backupsList.innerHTML = '';
+        backupsList.appendChild(errorDiv);
     }
 }
 
@@ -1535,7 +1539,11 @@ async function loadExtractedASARList() {
         });
     } catch (error) {
         console.error('Error loading extracted ASAR list:', error);
-        extractsList.innerHTML = `<div class="extract-item-empty">Error: ${error.message}</div>`;
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'extract-item-empty';
+        errorDiv.textContent = `Error: ${error.message}`;
+        extractsList.innerHTML = '';
+        extractsList.appendChild(errorDiv);
     }
 }
 
@@ -1796,45 +1804,82 @@ function renderColorMappings() {
             item.className = 'color-mapping-item' + (category ? ` color-${category}` : '');
             item.id = id;
             
+            // Build the item structure using DOM methods to prevent XSS
             // Show category label for main colors
-            const categoryLabel = category ? `<span class="color-category">${category.toUpperCase()}</span>` : '';
+            if (category) {
+                const catSpan = document.createElement('span');
+                catSpan.className = 'color-category';
+                catSpan.textContent = category.toUpperCase();
+                item.appendChild(catSpan);
+            }
             
-            item.innerHTML = `
-                ${categoryLabel}
-                <div class="color-grid-item">
-                    <div class="color-label">${oldColor}</div>
-                    <div class="color-preview" style="background: ${newColor};" onclick="selectColorForEditing(this, '${id}')" data-color-id="${id}"></div>
-                </div>
-                <div class="color-editor" id="editor-${id}" style="display: none;">
-                    <div class="color-controls-layout">
-                        <div class="color-text-fields">
-                            <div class="color-input-group">
-                                <label>HEX</label>
-                                <input type="text" class="hex-input" placeholder="#000000" maxlength="7" value="${normalizeColorToHex(newColor) || '#888888'}">
-                            </div>
-                            <div class="color-input-group">
-                                <label>R</label>
-                                <input type="number" class="rgb-r" min="0" max="255" value="136">
-                            </div>
-                            <div class="color-input-group">
-                                <label>G</label>
-                                <input type="number" class="rgb-g" min="0" max="255" value="136">
-                            </div>
-                            <div class="color-input-group">
-                                <label>B</label>
-                                <input type="number" class="rgb-b" min="0" max="255" value="136">
-                            </div>
+            // Create color grid item
+            const gridItem = document.createElement('div');
+            gridItem.className = 'color-grid-item';
+            
+            const label = document.createElement('div');
+            label.className = 'color-label';
+            label.textContent = oldColor;
+            
+            const preview = document.createElement('div');
+            preview.className = 'color-preview';
+            preview.style.background = newColor;
+            preview.onclick = () => selectColorForEditing(preview, id);
+            preview.setAttribute('data-color-id', id);
+            
+            gridItem.appendChild(label);
+            gridItem.appendChild(preview);
+            item.appendChild(gridItem);
+            
+            // Create color editor section using innerHTML (no user input here)
+            const editorDiv = document.createElement('div');
+            editorDiv.className = 'color-editor';
+            editorDiv.id = `editor-${id}`;
+            editorDiv.style.display = 'none';
+            
+            const normalizedNewColor = normalizeColorToHex(newColor) || '#888888';
+            editorDiv.innerHTML = `
+                <div class="color-controls-layout">
+                    <div class="color-text-fields">
+                        <div class="color-input-group">
+                            <label>HEX</label>
+                            <input type="text" class="hex-input" placeholder="#000000" maxlength="7" value="${normalizedNewColor}">
                         </div>
-                        <div class="color-wheel-container">
-                            <input type="color" class="color-wheel" value="${normalizeColorToHex(newColor) || '#888888'}" aria-label="Color wheel">
+                        <div class="color-input-group">
+                            <label>R</label>
+                            <input type="number" class="rgb-r" min="0" max="255" value="136">
+                        </div>
+                        <div class="color-input-group">
+                            <label>G</label>
+                            <input type="number" class="rgb-g" min="0" max="255" value="136">
+                        </div>
+                        <div class="color-input-group">
+                            <label>B</label>
+                            <input type="number" class="rgb-b" min="0" max="255" value="136">
                         </div>
                     </div>
-                    <input type="hidden" class="old-color" value="${oldColor}">
-                    <input type="hidden" class="new-color" value="${newColor}">
-                    <button class="btn btn-secondary btn-sm" onclick="closeColorEditor('${id}')">Done</button>
-                    <button class="remove-btn" onclick="removeColorMapping('${id}')">Remove</button>
+                    <div class="color-wheel-container">
+                        <input type="color" class="color-wheel" value="${normalizedNewColor}" aria-label="Color wheel">
+                    </div>
                 </div>
+                <button class="btn btn-secondary btn-sm" onclick="closeColorEditor('${id}')">Done</button>
+                <button class="remove-btn" onclick="removeColorMapping('${id}')">Remove</button>
             `;
+            
+            // Create hidden inputs using DOM methods
+            const oldColorInput = document.createElement('input');
+            oldColorInput.type = 'hidden';
+            oldColorInput.className = 'old-color';
+            oldColorInput.value = oldColor;
+            editorDiv.appendChild(oldColorInput);
+            
+            const newColorInput = document.createElement('input');
+            newColorInput.type = 'hidden';
+            newColorInput.className = 'new-color';
+            newColorInput.value = newColor;
+            editorDiv.appendChild(newColorInput);
+            
+            item.appendChild(editorDiv);
             
             fragment.appendChild(item);
             
