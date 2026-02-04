@@ -271,24 +271,55 @@ def validate_path_safety(requested_path, base_dir, allowed_prefixes=None):
         Tuple of (is_safe: bool, resolved_path: Path or None, error_message: str)
     """
     try:
-        base = Path(base_dir).resolve()  # Resolve symlinks and relative paths
-        requested = Path(requested_path).resolve()
+        # Validate input is string and not empty
+        if not isinstance(requested_path, str) or not requested_path.strip():
+            return False, None, "Invalid path: empty or not a string"
+        
+        # Strip whitespace
+        requested_path = requested_path.strip()
+        
+        # Prevent absolute paths (Windows drive letters, Unix /)
+        if requested_path.startswith('/') or requested_path.startswith('\\'):
+            return False, None, "Absolute paths not allowed"
+        if len(requested_path) > 1 and requested_path[1] == ':':
+            return False, None, "Absolute paths not allowed"
+        
+        # Prevent traversal sequences
+        if '..' in requested_path or requested_path.startswith('.'):
+            return False, None, "Invalid path: contains traversal sequences"
+        
+        # Validate each path component individually
+        path_parts = Path(requested_path).parts
+        for part in path_parts:
+            if part in ('.', '..') or part.startswith('.'):
+                return False, None, "Invalid path component"
+        
+        # SAFER APPROACH: Construct path by joining with base, not resolving user path alone
+        base = Path(base_dir).resolve()
+        requested = (base / requested_path).resolve()
         
         # Path must exist (prevents some attack vectors)
         if not requested.exists():
-            return False, None, f"Path does not exist: {requested_path}"
+            return False, None, "Path does not exist"
         
-        # Critical: Ensure path is within base directory
-        # relative_to() will raise ValueError if requested is outside base
+        # Critical: Ensure resolved path is still within base directory
+        # This catches symlink escapes and other resolution-time attacks
         try:
             requested.relative_to(base)
         except ValueError:
-            return False, None, f"Path is outside allowed directory: {requested_path}"
+            return False, None, "Path is outside allowed directory"
         
-        # Symlink check: reject if the target or any parent is a symlink
-        # This prevents attacks where a symlink points to system files
-        if requested.is_symlink() or any(part.is_symlink() for part in requested.parents):
+        # Symlink check: reject if the target is a symlink
+        if requested.is_symlink():
             return False, None, "Symlinks are not allowed"
+        
+        # Symlink check: reject if any parent directory is a symlink
+        # This prevents symlinks in the path hierarchy
+        for parent in requested.parents:
+            if parent == base:
+                break
+            if parent.is_symlink():
+                return False, None, "Symlinks in path are not allowed"
         
         # Optional: Check folder name follows allowed pattern
         # Used for extraction folders which should have specific names
@@ -1139,6 +1170,18 @@ def api_extracted_asset():
     # Validate extracted_dir is within trusted root (defense against user-controlled paths)
     try:
         launcher_root_resolved = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+        
+        # IMPORTANT: Validate extracted_dir components BEFORE resolving
+        # This prevents symlinks in extracted_dir from escaping the trusted boundary
+        extracted_dir_str = str(theme_manager.extracted_dir)
+        
+        # Check for absolute paths and traversal attempts
+        if extracted_dir_str.startswith('/') or extracted_dir_str.startswith('\\'):
+            return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+        if '..' in extracted_dir_str:
+            return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+        
+        # Now safely resolve
         extracted_dir_resolved = Path(theme_manager.extracted_dir).expanduser().resolve(strict=False)
         
         # Ensure extracted_dir is inside the trusted root
@@ -1147,9 +1190,16 @@ def api_extracted_asset():
         except ValueError:
             return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
         
-        # Check for symlinks in extracted_dir
+        # Check for symlinks in extracted_dir itself
         if extracted_dir_resolved.is_symlink():
             return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+        
+        # Check for symlinks in parent directories up to launcher root
+        for parent in extracted_dir_resolved.parents:
+            if parent == launcher_root_resolved:
+                break
+            if parent.is_symlink():
+                return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
     except (OSError, ValueError):
         return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
 
@@ -1208,6 +1258,18 @@ def api_launcher_asset():
     # Validate launcher_dir is within trusted root (defense against user-controlled paths)
     try:
         launcher_root_resolved = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+        
+        # IMPORTANT: Validate launcher_dir components BEFORE resolving
+        # This prevents symlinks in launcher_dir from escaping the trusted boundary
+        launcher_dir_str = str(theme_manager.launcher_dir)
+        
+        # Check for absolute paths and traversal attempts
+        if launcher_dir_str.startswith('/') or launcher_dir_str.startswith('\\'):
+            return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
+        if '..' in launcher_dir_str:
+            return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
+        
+        # Now safely resolve
         launcher_path_resolved = Path(theme_manager.launcher_dir).expanduser().resolve(strict=False)
         
         # Ensure launcher_dir is inside the trusted root
@@ -1216,9 +1278,16 @@ def api_launcher_asset():
         except ValueError:
             return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
         
-        # Check for symlinks in launcher_path
+        # Check for symlinks in launcher_dir itself
         if launcher_path_resolved.is_symlink():
             return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+        
+        # Check for symlinks in parent directories up to launcher root
+        for parent in launcher_path_resolved.parents:
+            if parent == launcher_root_resolved:
+                break
+            if parent.is_symlink():
+                return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
     except (OSError, ValueError):
         return jsonify({'success': False, 'error': 'Invalid launcher directory'}), 403
 
@@ -1228,12 +1297,31 @@ def api_launcher_asset():
     
     # If app.asar.unpacked doesn't exist, try extracted_dir
     if not app_dir.exists() and theme_manager.extracted_dir:
-        # Validate extracted_dir is within trusted root
+        # Validate extracted_dir is within trusted root (defense against user-controlled paths)
         try:
+            # IMPORTANT: Validate extracted_dir components BEFORE resolving
+            extracted_dir_str = str(theme_manager.extracted_dir)
+            
+            # Check for absolute paths and traversal attempts
+            if extracted_dir_str.startswith('/') or extracted_dir_str.startswith('\\'):
+                return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+            if '..' in extracted_dir_str:
+                return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
+            
+            # Now safely resolve
             extracted_dir_resolved = Path(theme_manager.extracted_dir).expanduser().resolve(strict=False)
             extracted_dir_resolved.relative_to(launcher_root_resolved)
+            
             if extracted_dir_resolved.is_symlink():
                 return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+            
+            # Check for symlinks in parent directories
+            for parent in extracted_dir_resolved.parents:
+                if parent == launcher_root_resolved:
+                    break
+                if parent.is_symlink():
+                    return jsonify({'success': False, 'error': 'Invalid configuration'}), 403
+            
             app_dir = extracted_dir_resolved
         except (OSError, ValueError):
             return jsonify({'success': False, 'error': 'Invalid extracted directory'}), 403
@@ -1597,8 +1685,36 @@ def api_open_latest_extract():
         return jsonify({'success': False, 'error': 'Extracted folder does not exist'}), 404
 
     try:
-        os.startfile(str(path))
-        return jsonify({'success': True, 'path': str(path)})
+        # SECURITY: Validate path is within trusted launcher root
+        launcher_root = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+        
+        # Validate extracted_dir components BEFORE using
+        extracted_dir_str = str(theme_manager.extracted_dir)
+        if extracted_dir_str.startswith('/') or extracted_dir_str.startswith('\\'):
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+        if '..' in extracted_dir_str:
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+        
+        # Resolve and check boundaries
+        path_resolved = path.expanduser().resolve(strict=False)
+        try:
+            path_resolved.relative_to(launcher_root)
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+        
+        # Check for symlinks
+        if path_resolved.is_symlink():
+            return jsonify({'success': False, 'error': 'Invalid path'}), 403
+        
+        for parent in path_resolved.parents:
+            if parent == launcher_root:
+                break
+            if parent.is_symlink():
+                return jsonify({'success': False, 'error': 'Invalid path'}), 403
+        
+        # Safe to open
+        os.startfile(str(path_resolved))
+        return jsonify({'success': True, 'message': 'Folder opened successfully'})
     except Exception as e:
         print(f'Error opening folder: {e}')
         return jsonify({'success': False, 'error': 'Failed to open folder'}), 500
