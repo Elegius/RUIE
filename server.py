@@ -965,21 +965,34 @@ def api_init():
         # If asarPath provided, validate and use it directly
         if asar_path:
             # Normalize and ensure the asar path is within the trusted launcher root directory
-            asar_path_abs = os.path.abspath(asar_path)
+            asar_path_resolved = Path(asar_path).expanduser().resolve(strict=False)
+            launcher_root_resolved = Path(LAUNCHER_ROOT_DIR).expanduser().resolve(strict=False)
+
+            # Ensure the resolved asar path is inside the resolved launcher root
             try:
-                common_root = os.path.commonpath([asar_path_abs, LAUNCHER_ROOT_DIR])
-            except ValueError:
-                common_root = None
-            if common_root != LAUNCHER_ROOT_DIR:
+                # Python 3.9+: Path.is_relative_to
+                is_inside_root = asar_path_resolved.is_relative_to(launcher_root_resolved)  # type: ignore[attr-defined]
+            except AttributeError:
+                # Fallback for older Python: use relative_to
+                try:
+                    asar_path_resolved.relative_to(launcher_root_resolved)
+                    is_inside_root = True
+                except ValueError:
+                    is_inside_root = False
+
+            if not is_inside_root:
                 return jsonify({
                     'success': False,
                     'error': 'Specified app.asar path is outside the trusted launcher directory'
                 }), 400
-            if os.path.exists(asar_path_abs):
+
+            if asar_path_resolved.exists():
+                asar_path_str = str(asar_path_resolved)
+                asar_dir_str = os.path.dirname(asar_path_str)
                 launcher_info = {
-                    'asarPath': asar_path_abs,
-                    'directory': os.path.dirname(asar_path_abs),
-                    'resourcesDir': os.path.dirname(asar_path_abs)
+                    'asarPath': asar_path_str,
+                    'directory': asar_dir_str,
+                    'resourcesDir': asar_dir_str
                 }
                 theme_manager.launcher_info = launcher_info
                 return jsonify({
