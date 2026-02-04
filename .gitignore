@@ -59,6 +59,8 @@ temp/
 .tmp/
 RELEASES/
 RUIE.code-workspace
+MIGRATION_CHECKLIST.md
+SETUP_COMPLETE.md
 
 # Secrets (never commit)
 *.key
