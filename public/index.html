@@ -111,14 +111,32 @@
             console.log('[LOADING]', msg, progress !== undefined ? `(${progress}%)` : '');
         }
         
+        // Expose to window so app.js can call it
+        window.updateLoadingStatus = updateLoadingStatus;
+        
         updateLoadingStatus('Initializing system...', 0);
         
         function hideLoadingScreen() {
+            console.log('[hideLoadingScreen] Called');
             const loader = document.getElementById('app-loading');
+            console.log('[hideLoadingScreen] loader element:', !!loader);
             if (loader) {
+                // Clear the safety timeout since we're hiding
+                if (window.absoluteLoaderTimeout) {
+                    clearTimeout(window.absoluteLoaderTimeout);
+                    console.log('[hideLoadingScreen] Cleared safety timeout');
+                }
+                
+                loader.style.display = 'none';  // Fallback: immediate hide
                 loader.style.opacity = '0';
                 loader.style.transition = 'opacity 0.3s';
-                setTimeout(() => loader.remove(), 300);
+                setTimeout(() => {
+                    console.log('[hideLoadingScreen] Removing loader after 300ms');
+                    loader.remove();
+                }, 300);
+                console.log('[hideLoadingScreen] Loader hidden');
+            } else {
+                console.warn('[hideLoadingScreen] Loader element not found!');
             }
         }
         
@@ -129,6 +147,8 @@
                 return;
             }
             
+            console.log('[INLINE] ======== START OF tryStartApp ========');
+            
             try {
                 updateLoadingStatus('Loading core systems...', 20);
                 console.log('[INLINE] tryStartApp called, typeof startApp:', typeof startApp);
@@ -137,16 +157,42 @@
                     updateLoadingStatus('Starting application...', 40);
                     
                     const result = startApp();
+                    console.log('[INLINE] startApp returned:', result);
+                    console.log('[INLINE] result type:', typeof result);
+                    console.log('[INLINE] result.then type:', typeof (result && result.then));
+                    console.log('[INLINE] is promise:', result && typeof result.then === 'function');
+                    
                     if (result && typeof result.then === 'function') {
+                        console.log('[INLINE] ✓ startApp returned a promise, setting up handlers');
+                        
+                        // Set a hard timeout to ensure app loads even if something hangs
+                        const appTimeoutId = setTimeout(() => {
+                            console.error('[INLINE] ⏱️ APP STARTUP TIMEOUT - forcing UI visible after 8s');
+                            if (!window.appStarted) {
+                                console.error('[INLINE] window.appStarted is still false, forcing cleanup');
+                                window.appStarted = true;
+                            }
+                            updateLoadingStatus('⚠ Initialization timeout, showing interface...', 100);
+                            progressBar.style.background = '#00c8ff';
+                            hideLoadingScreen();
+                        }, 8000); // Hard 8 second timeout
+                        
                         // Simulate progress while app loads
                         setTimeout(() => updateLoadingStatus('Initializing interface...', 60), 200);
                         setTimeout(() => updateLoadingStatus('Loading resources...', 80), 400);
                         
                         result.then(() => {
+                            console.log('[INLINE] ✅ startApp promise resolved successfully');
+                            clearTimeout(appTimeoutId);
                             updateLoadingStatus('Ready!', 100);
-                            setTimeout(hideLoadingScreen, 500);
+                            setTimeout(() => {
+                                console.log('[INLINE] Calling hideLoadingScreen after 300ms delay');
+                                hideLoadingScreen();
+                            }, 300);
                         }).catch(function(err) {
-                            console.error('[INLINE] startApp error:', err?.message || String(err));
+                            console.error('[INLINE] ❌ startApp promise rejected');
+                            console.error('[INLINE] Error message:', err?.message || String(err));
+                            clearTimeout(appTimeoutId);
                             console.error('[INLINE] Stack:', err?.stack);
                             updateLoadingStatus('⚠ Error: ' + (err?.message || String(err)), 100);
                             progressBar.style.background = 'linear-gradient(90deg, #ff4444 0%, #ff0000 50%, #ff4444 100%)';
@@ -156,23 +202,48 @@
                                 errorDiv.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);max-width:600px;background:rgba(255,68,68,0.95);color:white;padding:20px 30px;z-index:999999;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.1);';
                                 errorDiv.innerHTML = '<h3 style="margin:0 0 10px 0;font-family:Orbitron,Arial,sans-serif;">⚠ Startup Error</h3><pre style="white-space:pre-wrap;font-size:12px;margin:0;font-family:monospace;background:rgba(0,0,0,0.2);padding:10px;border-radius:5px;max-height:300px;overflow:auto;">' + (err?.stack || err?.message || String(err)) + '</pre>';
                                 document.body.appendChild(errorDiv);
-                            }, 1000);
+                                // Still hide loading screen on error
+                                hideLoadingScreen();
+                            }, 100);
                         });
+                    } else {
+                        console.error('[INLINE] ❌ startApp did not return a promise:', result);
+                        console.error('[INLINE] typeof result:', typeof result);
+                        updateLoadingStatus('⚠ startApp returned non-promise', 50);
+                        setTimeout(hideLoadingScreen, 1000);
                     }
                 } else {
-                    console.error('[INLINE] startApp not found or not a function');
+                    console.error('[INLINE] ❌ startApp not found or not a function');
                     updateLoadingStatus('⚠ Error: Core system not found', 50);
+                    setTimeout(hideLoadingScreen, 1000);
                 }
             } catch (err) {
-                console.error('[INLINE] Error calling startApp:', err?.message || String(err));
+                console.error('[INLINE] ❌ Error calling startApp:', err?.message || String(err));
                 console.error('[INLINE] Stack:', err?.stack);
                 updateLoadingStatus('⚠ Critical error: ' + (err?.message || String(err)), 100);
+                setTimeout(hideLoadingScreen, 2000);
             }
+            
+            console.log('[INLINE] ======== END OF tryStartApp ========');
         }
         
         // Only use DOMContentLoaded - most reliable
         console.log('[INLINE] Setting up DOMContentLoaded listener');
         updateLoadingStatus('Loading modules...', 10);
+        
+        // Safety fallback: Always hide loading screen after 10 seconds max
+        const absoluteTimeout = setTimeout(() => {
+            console.warn('[INLINE] ⏱️ ABSOLUTE SAFETY TIMEOUT - hiding loading screen forcefully');
+            const loader = document.getElementById('app-loading');
+            if (loader && loader.style.display !== 'none') {
+                console.warn('[INLINE] Loader still visible, forcing hide');
+                loader.style.display = 'none';
+                hideLoadingScreen();
+            }
+        }, 10000);
+        
+        // Store the timeout ID so it can be cleared when we successfully hide
+        window.absoluteLoaderTimeout = absoluteTimeout;
         
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', function() {
@@ -241,7 +312,7 @@
                         <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                             <button id="extract-btn" class="btn btn-primary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;">Decompile app.asar</button>
                             <button id="open-latest-extract-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openLatestExtract()">Open Last Extracted</button>
-                            <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Folder</button>
+                            <button id="open-extractions-folder-btn" class="btn btn-secondary" style="flex: 1; font-size: 0.85em; padding: 8px 12px;" onclick="openExtractionsFolder()" title="Open extractions directory">📂 Open decompiled asars folder</button>
                         </div>
 
                         <div id="extract-progress" class="progress" style="display: none; margin-top: 15px;">
@@ -265,7 +336,7 @@
                         
                         <div class="backup-actions" style="margin-bottom: 15px; display: flex; justify-content: center; gap: 10px;">
                             <button id="create-backup-btn" class="btn btn-primary" style="font-size: 0.85em; padding: 8px 12px;" onclick="createNewBackup()">📦 Create New Backup</button>
-                            <button id="open-backups-folder-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open Folder</button>
+                            <button id="open-backups-folder-btn" class="btn btn-secondary" style="font-size: 0.85em; padding: 8px 12px;" onclick="openBackupsFolder()" title="Open backups directory">📂 Open backups folder</button>
                         </div>
                         
                         <div id="backups-status" class="status"></div>
@@ -420,51 +491,32 @@
 
             <!-- Step 5: Finalize -->
             <section class="step page" id="step-5" data-page="5" style="display: none;">
-                <h2>Step 5: Repack, Test & Finalize</h2>
-                <p>Compile your changes and test the modified launcher.</p>
+                <h2>Step 5: Test, Export & Install</h2>
+                <p>Test your theme, export your configuration, or install it to your launcher.</p>
 
-                <div class="split-layout">
-                    <div class="editor-panel">
-                        <div class="preset-selector-container">
-                            <label for="preset-selector" class="preset-label">Select a Manufacturer Preset:</label>
-                            <select id="preset-selector" class="preset-dropdown" onchange="handlePresetChange(this.value)">
-                                <option value="">Select a manufacturer preset...</option>
-                                <option value="rsi">RSI</option>
-                                <option value="aegis-dynamics">Aegis Dynamics</option>
-                                <option value="anvil-aerospace">Anvil Aerospace</option>
-                                <option value="aopoa">Aopoa</option>
-                                <option value="argo">Argo Astronautics</option>
-                                <option value="banu">Banu</option>
-                                <option value="consolidated-outland">Consolidated Outland</option>
-                                <option value="crusader-industries">Crusader Industries</option>
-                                <option value="drake-interplanetary">Drake Interplanetary</option>
-                                <option value="esperia">Esperia</option>
-                                <option value="gatac">Gatac Manufacture</option>
-                                <option value="greycat">Greycat Industrial</option>
-                                <option value="kruger">Kruger Intergalactic</option>
-                                <option value="misc">MISC</option>
-                                <option value="origin-jumpworks">Origin Jumpworks</option>
-                                <option value="tumbril">Tumbril Land Systems</option>
-                                <option value="vanduul">Vanduul</option>
-                                <option value="c3rb">C3RB (Custom)</option>
-                            </select>
+                <div class="finalize-container">
+                    <div class="finalize-actions">
+                        <div class="action-card">
+                            <div class="action-card-header">🧪 Test Theme</div>
+                            <div class="action-card-description">Launch the modified launcher to see your theme in action</div>
+                            <button class="btn btn-secondary btn-large" id="test-btn" onclick="testTheme()">Test Launcher</button>
                         </div>
 
-                        <div class="color-mappings">
-                            <div id="colorList" class="color-list"></div>
-                            <button class="btn btn-secondary" onclick="addColorMapping()">+ Add Color Mapping</button>
+                        <div class="action-card">
+                            <div class="action-card-header">💾 Export Theme</div>
+                            <div class="action-card-description">Download your theme configuration as a JSON file for sharing or backup</div>
+                            <button class="btn btn-secondary btn-large" id="export-btn" onclick="exportTheme()">Export Theme</button>
                         </div>
 
-                        <button class="btn btn-primary" onclick="applyColors()">Apply Colors</button>
-                        <div id="colors-status" class="status"></div>
+                        <div class="action-card">
+                            <div class="action-card-header">🔧 Install Theme</div>
+                            <div class="action-card-description">Install your theme to the actual launcher (automatic backup created)</div>
+                            <button class="btn btn-success btn-large" id="install-btn" onclick="installTheme()">Install Theme</button>
+                        </div>
                     </div>
 
-                    <div class="preview-panel">
-                        <div class="preview-header">Live Theme Preview</div>
-                        <iframe id="previewFrame" class="preview-frame" src="preview.html" title="Theme Preview"></iframe>
-                    </div>
+                    <div id="finalize-status" class="finalize-status"></div>
                 </div>
-                <div id="backupsList" class="backups-list"></div>
             </section>
         </main>
 

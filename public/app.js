@@ -34,6 +34,57 @@ console.log('[app.js] FILE LOADED - ready to execute');
 console.log('[app.js] Script loaded at', new Date().toISOString());
 
 /**
+ * Clear browser cache and storage on app exit
+ * Ensures app always loads with fresh cache on next launch
+ */
+function setupCacheClearingOnExit() {
+    // Clear storage on page unload/close
+    window.addEventListener('beforeunload', () => {
+        try {
+            // Clear localStorage
+            localStorage.clear();
+            // Clear sessionStorage
+            sessionStorage.clear();
+            
+            // Clear IndexedDB databases
+            if (window.indexedDB && indexedDB.databases) {
+                indexedDB.databases().then(dbs => {
+                    dbs.forEach(db => {
+                        try {
+                            indexedDB.deleteDatabase(db.name);
+                        } catch (e) {
+                            console.error('[Cache Clear] Error deleting IndexedDB:', e);
+                        }
+                    });
+                }).catch(e => {
+                    console.error('[Cache Clear] Error listing IndexedDB databases:', e);
+                });
+            }
+            
+            // Clear service worker cache if exists
+            if ('caches' in window) {
+                caches.keys().then(cacheNames => {
+                    cacheNames.forEach(cacheName => {
+                        caches.delete(cacheName).catch(e => {
+                            console.error('[Cache Clear] Error deleting cache:', e);
+                        });
+                    });
+                }).catch(e => {
+                    console.error('[Cache Clear] Error listing caches:', e);
+                });
+            }
+            
+            console.log('[Cache Clear] Storage cleared on app exit');
+        } catch (e) {
+            console.error('[Cache Clear] Error during cache cleanup:', e);
+        }
+    });
+}
+
+// Call this on app initialization
+setupCacheClearingOnExit();
+
+/**
  * Send debug logs to the backend server
  * 
  * Useful for tracking user actions and debugging client-side issues
@@ -597,9 +648,15 @@ const presetFiles = [
 
 async function loadPresetFiles() {
     const loaded = {};
+    
+    console.log('[loadPresetFiles] Starting to load', presetFiles.length, 'preset files');
+    if (window.updateLoadingStatus) window.updateLoadingStatus('Loading color presets...', 26);
 
     for (let i = 0; i < presetFiles.length; i++) {
         const presetId = presetFiles[i];
+        const progress = 26 + (i / presetFiles.length) * 8; // Progress from 26% to 34%
+        if (window.updateLoadingStatus && i % 2 === 0) window.updateLoadingStatus(`Loading preset: ${presetId}...`, Math.floor(progress));
+        
         try {
             const response = await fetch(`/presets/color-mapping-${presetId}.json`);
             if (!response.ok) {
@@ -643,6 +700,9 @@ async function loadPresetFiles() {
     if (colorPresets.rsi && colorPresets.rsi.media) {
         state.media = { ...colorPresets.rsi.media };
     }
+    
+    console.log('[loadPresetFiles] Finished loading', Object.keys(loaded).length, 'presets');
+    if (window.updateLoadingStatus) window.updateLoadingStatus('Presets loaded', 34);
 }
 
 /**
@@ -1484,6 +1544,9 @@ async function loadBackupsList() {
     if (!backupsList) return;
 
     try {
+        console.log('[loadBackupsList] Starting to load backups');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Loading backups...', 62);
+        
         const response = await fetch('/api/backups');
         const data = await response.json();
 
@@ -1492,6 +1555,8 @@ async function loadBackupsList() {
         }
 
         const backups = data.backups || [];
+        console.log('[loadBackupsList] Loaded', backups.length, 'backups');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Backups loaded', 68);
 
         if (backups.length === 0) {
             backupsList.innerHTML = '<div class="backup-item-empty">No backups yet. Create one to get started.</div>';
@@ -1539,6 +1604,7 @@ async function loadBackupsList() {
         });
     } catch (error) {
         console.error('Error loading backups:', error);
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Error loading backups', 68);
         const errorDiv = document.createElement('div');
         errorDiv.className = 'backup-item-empty';
         errorDiv.textContent = `Error: ${error.message}`;
@@ -1600,6 +1666,9 @@ async function loadExtractedASARList() {
     }
 
     try {
+        console.log('[loadExtractedASARList] Starting to load extracts');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Loading extractions...', 74);
+        
         const response = await fetch('/api/extracted-list');
         const data = await response.json();
 
@@ -1608,6 +1677,8 @@ async function loadExtractedASARList() {
         }
 
         const extracts = data.extracts || [];
+        console.log('[loadExtractedASARList] Loaded', extracts.length, 'extracts');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Extractions loaded', 80);
 
         if (extracts.length === 0) {
             extractsList.innerHTML = '<div class="extract-item-empty">No extracted ASARs yet. Extract one to get started.</div>';
@@ -3778,6 +3849,7 @@ async function startApp() {
     try {
         // Initialize DOM cache first for performance
         console.log('[startApp] Starting initialization');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Initializing DOM...', 5);
         DOM.init();
         console.log('[startApp] DOM initialized, asarPath element:', DOM.asarPath);
         
@@ -3810,71 +3882,58 @@ async function startApp() {
 
         appendDebug('DOM initialized');
         console.log('[window.load] Navigating to page 1...');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Setting up interface...', 15);
         navigateToPage(1);
         appendDebug('Page navigation done');
         console.log('[window.load] Page navigation complete');
         
-        // Load presets in background with timeout
-        console.log('[window.load] Loading preset files...');
+        // Load presets in background with timeout - DON'T await
+        console.log('[window.load] Starting background preset loading...');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Loading manufacturer presets...', 25);
         Promise.race([
             loadPresetFiles(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Preset loading timeout')), 5000))
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Preset loading timeout')), 3000))
         ]).then(() => {
             appendDebug('Presets loaded');
             console.log('[window.load] Preset files loaded');
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Manufacturer presets loaded', 35);
         }).catch((err) => {
             console.warn('[window.load] Preset loading failed, continuing anyway:', err.message);
-            appendDebug('Warning: Preset loading timeout, continuing');
+            appendDebug('Warning: Preset loading failed, continuing');
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Presets unavailable, continuing...', 35);
         });
         
-        // Detect and initialize launcher FIRST (silently - don't auto-init)
-        console.log('[window.load] Calling detectLauncher...');
-        appendDebug('Calling detectLauncher...');
-        await detectLauncher({ autoInit: false, silentFailure: true });
-        appendDebug('detectLauncher complete');
-        appendDebug('asarPath value: ' + (DOM.asarPath?.value || 'EMPTY'));
-        console.log('[window.load] detectLauncher complete, asarPath value:', DOM.asarPath?.value);
-        
-        // Load initial backups list (only after launcher is detected)
-        try {
-            console.log('[window.load] Loading backups...');
-            appendDebug('Loading backups...');
-            await loadBackupsList();
-            appendDebug('Backups loaded');
-            console.log('[window.load] Backups loaded');
-        } catch (e) {
-            appendDebug('Backup error: ' + e.message);
-            console.warn('[window.load] Error loading backups:', e);
-        }
-
-        // Load initial extracted list
-        try {
-            console.log('[window.load] Loading extractions...');
-            appendDebug('Loading extractions...');
-            await loadExtractedASARList();
-            appendDebug('Extractions loaded');
-            console.log('[window.load] Extractions loaded');
-        } catch (e) {
-            appendDebug('Extraction error: ' + e.message);
-            console.warn('[window.load] Error loading extractions:', e);
-        }
+        // Detect launcher in background with timeout - DON'T await
+        console.log('[window.load] Starting background launcher detection...');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Detecting RSI Launcher...', 45);
+        appendDebug('Starting background launcher detection...');
+        Promise.race([
+            detectLauncher({ autoInit: false, silentFailure: true }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Launcher detection timeout')), 5000))
+        ]).then(() => {
+            appendDebug('Launcher detection complete');
+            console.log('[window.load] Launcher detection complete');
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Launcher detected, loading backups...', 60);
+            // Now safe to load backups/extracts
+            loadBackupsList().catch(e => console.warn('[startApp] Error loading backups:', e));
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Backups loaded, loading extracts...', 75);
+            loadExtractedASARList().catch(e => console.warn('[startApp] Error loading extracts:', e));
+            if (window.updateLoadingStatus) window.updateLoadingStatus('All data loaded, finalizing...', 90);
+        }).catch((err) => {
+            appendDebug('Launcher detection timeout or error: ' + err.message);
+            console.warn('[window.load] Launcher detection timeout, continuing:', err.message);
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Loading backup data...', 60);
+            // Still try to load lists anyway
+            loadBackupsList().catch(e => console.warn('[startApp] Error loading backups after timeout:', e));
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Loading extracted data...', 75);
+            loadExtractedASARList().catch(e => console.warn('[startApp] Error loading extracts after timeout:', e));
+            if (window.updateLoadingStatus) window.updateLoadingStatus('Finalizing setup...', 90);
+        });
 
         // Start real-time polling for backups/extractions
         startListPolling(5000);
         
-        // Load extracted ASAR list (only after launcher is detected)
-        try {
-            console.log('[window.load] Loading extracted ASARs...');
-            appendDebug('Loading extracted ASARs...');
-            await loadExtractedASARList();
-            appendDebug('Extracted ASARs loaded');
-            console.log('[window.load] Extracted ASARs loaded');
-        } catch (e) {
-            appendDebug('Extracted ASAR error: ' + e.message);
-            console.warn('[window.load] Error loading extracted ASARs:', e);
-        }
-        
-        // CRITICAL: Attach button event listeners
+        // CRITICAL: Attach button event listeners (synchronous, fast)
         console.log('[startApp] Attaching button event listeners...');
         
         // Auto-Detect Launcher button
@@ -3974,10 +4033,19 @@ async function startApp() {
         
         appendDebug('✓ Application fully initialized');
         console.log('[startApp] Application fully initialized successfully');
+        sendDebugToServer('[startApp] About to return Promise.resolve()', 'INFO');
+        if (window.updateLoadingStatus) window.updateLoadingStatus('Application ready!', 95);
+        
+        // Explicitly return a resolved promise to signal completion
+        const resolvedPromise = Promise.resolve();
+        console.log('[startApp] Returning resolved promise:', resolvedPromise);
+        sendDebugToServer('[startApp] Returning resolved promise from startApp', 'INFO');
+        return resolvedPromise;
         
     } catch (error) {
         console.error('[startApp] FATAL ERROR:', error);
         console.error('[startApp] Stack:', error.stack);
+        sendDebugToServer('[startApp] FATAL ERROR: ' + error.message, 'ERROR');
         // Try to display error in debug element if it exists
         if (document.getElementById('debug-info')) {
             document.getElementById('debug-info').innerHTML = 'CRITICAL ERROR: ' + error.message;
@@ -3985,3 +4053,181 @@ async function startApp() {
         throw error;  // Re-throw so caller knows there was an error
     }
 }
+
+/**
+ * Repack modified files into app.asar
+ */
+/**
+ * Test the modified launcher
+ */
+async function testTheme() {
+    const btn = document.getElementById('test-btn');
+    
+    if (!btn) return;
+    btn.disabled = true;
+    
+    try {
+        showStatus('finalize-status', 'Starting launcher test...', 'info');
+        
+        const response = await fetch('/api/test-launcher', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to start launcher');
+        }
+        
+        showStatus('finalize-status', '✓ Launcher started. Check if your theme looks correct!', 'success');
+        console.log('Launcher test initiated');
+        
+    } catch (error) {
+        console.error('Test error:', error);
+        showStatus('finalize-status', `Error: ${error.message}`, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/**
+ * Export current theme configuration
+ */
+async function exportTheme() {
+    const btn = document.getElementById('export-btn');
+    
+    if (!btn) return;
+    btn.disabled = true;
+    
+    try {
+        showStatus('finalize-status', 'Preparing theme export...', 'info');
+        
+        const themeName = prompt('Enter a name for this theme:', 'My Custom Theme');
+        if (!themeName) {
+            showStatus('finalize-status', 'Export cancelled', 'info');
+            return;
+        }
+        
+        const colors = collectColorMappings();
+        
+        const response = await fetch('/api/config/export', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: themeName,
+                config: {
+                    colors: colors,
+                    media: state.media || []
+                }
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (!response.ok) {
+            throw new Error(data.error || 'Failed to export theme');
+        }
+        
+        // Download the theme as JSON
+        const jsonString = JSON.stringify(data.theme, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${themeName.replace(/\s+/g, '-').toLowerCase()}.theme.json`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        showStatus('finalize-status', `✓ Theme exported as "${link.download}"`, 'success');
+        console.log('Theme exported successfully');
+        
+    } catch (error) {
+        console.error('Export error:', error);
+        showStatus('finalize-status', `Error: ${error.message}`, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+/**
+ * Install the modified theme to the actual launcher
+ */
+async function installTheme() {
+    const btn = document.getElementById('install-btn');
+    
+    if (!btn) return;
+    
+    // Confirm with user
+    const confirmed = confirm(
+        'This will:\n' +
+        '1. Backup your current launcher\n' +
+        '2. Install the modified theme\n\n' +
+        'Make sure you\'ve tested your theme first!\n\n' +
+        'Continue?'
+    );
+    
+    if (!confirmed) {
+        showStatus('finalize-status', 'Installation cancelled', 'info');
+        return;
+    }
+    
+    btn.disabled = true;
+    
+    try {
+        showStatus('finalize-status', 'Applying colors to extracted files...', 'info');
+        
+        // First apply colors
+        const colors = collectColorMappings();
+        const colorResponse = await fetch('/api/apply-colors', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ colors })
+        });
+        
+        if (!colorResponse.ok) {
+            throw new Error('Failed to apply colors');
+        }
+        
+        showStatus('finalize-status', 'Repacking theme files...', 'info');
+        
+        // Then repack
+        const repackResponse = await fetch('/api/repack', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!repackResponse.ok) {
+            throw new Error('Failed to repack theme');
+        }
+        
+        showStatus('finalize-status', 'Installing to launcher (creating backup)...', 'info');
+        
+        // Finally install
+        const installResponse = await fetch('/api/install-asar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                extractedPath: state.extractedDir
+            })
+        });
+        
+        const installData = await installResponse.json();
+        
+        if (!installResponse.ok) {
+            throw new Error(installData.error || 'Failed to install theme');
+        }
+        
+        showStatus('finalize-status', '✓ Theme installed successfully! Launch your RSI Launcher to see the changes.', 'success');
+        console.log('Theme installed successfully');
+        
+    } catch (error) {
+        console.error('Install error:', error);
+        showStatus('finalize-status', `Error: ${error.message}`, 'error');
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+

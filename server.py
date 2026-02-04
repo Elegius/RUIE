@@ -149,6 +149,7 @@ def add_security_headers(response):
     - X-XSS-Protection: Enables browser's built-in XSS filter
     - Strict-Transport-Security: Force HTTPS (production only)
     - Content-Security-Policy: Restricts what scripts/styles can be loaded
+    - Cache-Control: Prevents caching of HTML/JS for fresh loads on every launch
     """
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
@@ -158,12 +159,17 @@ def add_security_headers(response):
         response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     
-    # Cache static assets for performance
-    if response.content_type and ('image' in response.content_type or 
+    # Prevent caching of HTML and JavaScript files for fresh loads
+    if response.content_type and ('html' in response.content_type or 'javascript' in response.content_type):
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+    # Cache static assets (images, fonts, css) for performance
+    elif response.content_type and ('image' in response.content_type or 
                                    'font' in response.content_type or
-                                   'css' in response.content_type or
-                                   'javascript' in response.content_type):
+                                   'css' in response.content_type):
         response.cache_control.max_age = 86400
+    
     return response
 
 # Working directory for extractions, backups, and temporary files
