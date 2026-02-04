@@ -736,7 +736,8 @@ class ThemeManager:
                 raise PermissionError(f'Permission denied: Unable to write to {asar_path}. Try running as Administrator.')
             
             # Repack (without shell - safer)
-                result = subprocess.run(  # noqa: B607, B603
+            result = subprocess.run(  # noqa: B607, B603
+                ['npx', 'asar', 'pack', self.extracted_dir, asar_path],
                 capture_output=True,
                 text=True,
                 check=False
@@ -1681,6 +1682,7 @@ def api_backups_list():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': 'Failed to retrieve backup list'}), 500
+@app.route('/api/use-extract', methods=['POST'])
 def api_use_extract():
     """Set an existing extracted folder as active."""
     data = request.json or {}
@@ -2379,13 +2381,13 @@ def api_test_launcher():
                     launcher_exe_abs = os.path.abspath(launcher_exe_path)
                     asar_dir = os.path.dirname(os.path.abspath(asar_path_value)) if asar_path_value else None
                     if not asar_dir:
+                        return False
                     # Ensure the asar directory itself is under the trusted launcher root
                     try:
                         asar_common_root = os.path.commonpath([asar_dir, LAUNCHER_ROOT_DIR])
                     except ValueError:
                         return False
                     if asar_common_root != LAUNCHER_ROOT_DIR:
-                        return False
                         return False
                     # Ensure the launcher executable is within the same tree as the asar directory
                     try:
