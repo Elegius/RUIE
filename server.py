@@ -4,7 +4,7 @@ import os
 import sys
 import json
 import shutil
-import subprocess
+import subprocess  # noqa: B404 - Used for safe ASAR extraction/packing
 import re
 import tempfile
 import time
@@ -312,7 +312,7 @@ class ThemeManager:
             # Try extraction with npx first (if Node.js is available)
             print(f"[ThemeManager] Attempting extraction with npx asar...")
             try:
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: B607, B603
                     ['npx', 'asar', 'extract', asar_path, extracted_path],
                     capture_output=True,
                     text=True,
@@ -518,8 +518,7 @@ class ThemeManager:
                 raise PermissionError(f'Permission denied: Unable to write to {asar_path}. Try running as Administrator.')
             
             # Repack (without shell - safer)
-            result = subprocess.run(
-                ['npx', 'asar', 'pack', self.extracted_dir, asar_path],
+                result = subprocess.run(  # noqa: B607, B603
                 capture_output=True,
                 text=True,
                 check=False
@@ -1759,7 +1758,7 @@ def api_test_launcher():
                 temp_asar = tmp.name
             
             # Pack the extracted dir to temp location
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: B607, B603
                 ['npx', 'asar', 'pack', extracted_path, temp_asar],
                 capture_output=True,
                 text=True,
@@ -1903,7 +1902,7 @@ def api_compile_asar():
                 output_asar = tmp.name
             
             # Pack the extracted dir
-            result = subprocess.run(
+            result = subprocess.run(  # noqa: B607, B603
                 ['npx', 'asar', 'pack', extracted_path, output_asar],
                 capture_output=True,
                 text=True,
@@ -1989,7 +1988,7 @@ def api_install_asar():
                 with tempfile.NamedTemporaryFile(suffix='.asar', delete=False) as tmp:
                     temp_asar = tmp.name
                 
-                result = subprocess.run(
+                result = subprocess.run(  # noqa: B607, B603
                     ['npx', 'asar', 'pack', extracted_path, temp_asar],
                     capture_output=True,
                     text=True,

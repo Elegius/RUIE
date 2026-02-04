@@ -21,7 +21,7 @@ Development Note: This application was developed with AI assistance using GitHub
 
 import sys
 import os
-import subprocess
+import subprocess  # noqa: B404 - Used for starting Flask server safely
 import time
 import socket
 import ctypes
@@ -555,8 +555,8 @@ class LauncherApp(QMainWindow):
                     startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
                     startupinfo.wShowWindow = subprocess.SW_HIDE
                 
-                self.server_process = subprocess.Popen(
-                    ['python', 'server.py'],
+                self.server_process = subprocess.Popen(  # noqa: B603, B607
+                    [sys.executable, 'server.py'],  # Use sys.executable instead of 'python'
                     cwd=project_root,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
@@ -574,8 +574,8 @@ class LauncherApp(QMainWindow):
                             if not line:
                                 break
                             logger.info(f'[Server] {line.rstrip()}')
-                    except:
-                        pass
+                    except Exception as e:  # noqa: B110 - Appropriate here for stream reading
+                        logger.debug(f'Error reading output: {e}')
                 
                 def read_errors():
                     try:
@@ -584,8 +584,8 @@ class LauncherApp(QMainWindow):
                             if not line:
                                 break
                             logger.error(f'[Server Error] {line.rstrip()}')
-                    except:
-                        pass
+                    except Exception as e:  # noqa: B110 - Appropriate here for stream reading
+                        logger.debug(f'Error reading errors: {e}')
                 
                 output_thread = threading.Thread(target=read_output, daemon=True)
                 error_thread = threading.Thread(target=read_errors, daemon=True)
@@ -702,15 +702,20 @@ class LauncherApp(QMainWindow):
             # First, fetch the launcher info from the API
             try:
                 import urllib.request
+                import urllib.error
                 import json
-                response = urllib.request.urlopen('http://127.0.0.1:5000/api/detect-launcher')
-                data = json.loads(response.read().decode())
-                asar_path = ''
-                if data.get('success') and data.get('launcher'):
-                    asar_path = data['launcher'].get('asarPath', '')
-                    logger.info(f'[PYTHON] Got asarPath: {asar_path}')
-                else:
-                    logger.warning('[PYTHON] Failed to get launcher info')
+                try:
+                    response = urllib.request.urlopen('http://127.0.0.1:5000/api/detect-launcher', timeout=5)  # noqa: B310
+                    data = json.loads(response.read().decode())
+                    asar_path = ''
+                    if data.get('success') and data.get('launcher'):
+                        asar_path = data['launcher'].get('asarPath', '')
+                        logger.info(f'[PYTHON] Got asarPath: {asar_path}')
+                    else:
+                        logger.warning('[PYTHON] Failed to get launcher info')
+                except urllib.error.URLError as e:
+                    logger.warning(f'[PYTHON] Failed to connect to API: {e}')
+                    asar_path = ''
                 
                 # Now inject JavaScript to fill the field and setup button handlers
                 js_code = f'''
