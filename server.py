@@ -1932,7 +1932,15 @@ def api_test_launcher():
                 if not validate_launcher_exe_path(launcher_exe, asar_path):
                     try:
                         if os.path.exists(backup_asar):
-                            shutil.copy2(backup_asar, asar_path)
+                            # Validate asar_path before restoring backup to avoid using an uncontrolled path
+                            asar_path_abs = os.path.abspath(asar_path)
+                            try:
+                                common_root = os.path.commonpath([asar_path_abs, LAUNCHER_ROOT_DIR])
+                            except ValueError:
+                                common_root = None
+                            if common_root != LAUNCHER_ROOT_DIR:
+                                raise ValueError("Refusing to restore backup outside trusted launcher directory")
+                            shutil.copy2(backup_asar, asar_path_abs)
                             os.remove(backup_asar)
                     except Exception:
                         print('[ThemeManager] Failed to restore backup after invalid launcher path detected')
