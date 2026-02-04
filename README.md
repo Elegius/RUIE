@@ -7,6 +7,7 @@ Custom launcher theme editor for Roberts Space Industries Launcher. Change color
 [![Flask](https://img.shields.io/badge/Flask-✓-green)](https://flask.palletsprojects.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue)](LICENSE)
 [![CodeQL](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main)](https://github.com/Elegius/RUIE/actions/workflows/github-code-scanning/codeql)
+[![Security Scanning](https://github.com/Elegius/RUIE/actions/workflows/security-scan.yml/badge.svg?branch=main)](https://github.com/Elegius/RUIE/actions/workflows/security-scan.yml)
 
 ## Features
 
