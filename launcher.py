@@ -718,7 +718,7 @@ class LauncherApp(QMainWindow):
                     asar_path = ''
                 
                 # Now inject JavaScript to fill the field and setup button handlers
-                js_code = f'''
+                js_code = f'''  # noqa: B608
                 (function() {{
                     console.log('[INJECTED] Starting initialization');
                     

@@ -1474,7 +1474,7 @@ def api_check_updates():
                 url,
                 headers={'User-Agent': 'RUIE-UpdateChecker'}
             )
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=5) as response:  # noqa: B310
                 data = json_lib.loads(response.read().decode())
                 latest_version = data.get('tag_name', '').lstrip('v')
                 release_url = data.get('html_url', 'https://github.com/Elegius/RUIE/releases')

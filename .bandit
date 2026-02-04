@@ -1,25 +1,3 @@
-# .bandit configuration file
-# Specifies settings for Python security linting
-
-# Tests to skip (false positives or accepted risks)
-skips = [
-    'B404',  # Consider possible security implications associated with the subprocess module
-    'B603',  # subprocess call - we use safe argument lists
-    'B607',  # Starting a process with a partial executable path - we handle this safely
-    'B310',  # urllib.urlopen - localhost only, safe
-]
-
-# Tests to include
-tests = []
-
-# Exclude certain files or patterns
-exclude_dirs = [
-    '/test',
-    '/.venv',
-    '/venv',
-    '/__pycache__',
-    '/.pytest_cache',
-]
-
-# Report format and level
-severity_level = 'medium'
+[bandit]
+exclude_dirs = /test,/.venv,/venv,/__pycache__,/.pytest_cache,.git
+skips = B404,B603,B607
