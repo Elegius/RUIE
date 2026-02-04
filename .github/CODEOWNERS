@@ -1,0 +1,27 @@
+# CODEOWNERS file for RUIE project
+# This file specifies who should be automatically requested as reviewers
+# for pull requests that modify certain files or areas of the code.
+
+# Default owner for everything in the repository
+* @Elegius
+
+# Security-sensitive files
+SECURITY.md @Elegius
+SECURITY_POLICY.md @Elegius
+.github/dependabot.yml @Elegius
+requirements.txt @Elegius
+requirements-build.txt @Elegius
+
+# Core application logic
+server.py @Elegius
+launcher.py @Elegius
+
+# Documentation
+README.md @Elegius
+CHANGELOG.md @Elegius
+DEVELOPMENT.md @Elegius
+
+# Build configuration
+setup.iss @Elegius
+RUIE.spec @Elegius
+build.bat @Elegius

@@ -1,5 +1,7 @@
 # SECURITY.md - Security Policy & Implementation
 
+**For security policy and vulnerability reporting, see [SECURITY_POLICY.md](SECURITY_POLICY.md)**
+
 Security is a core priority for RUIE. This document outlines security practices, vulnerability reporting, and security implementation details.
 
 ## Security Status

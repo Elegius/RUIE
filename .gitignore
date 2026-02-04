@@ -2,6 +2,7 @@ node_modules/
 .npm
 .env
 .env.local
+.env*.local
 .DS_Store
 *.log
 npm-debug.log*
@@ -21,3 +22,42 @@ build/
 RELEASES/
 RUIE.code-workspace
 __pycache__
+*.pyc
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.env
+.env.local
+
+# Secrets (never commit)
+*.key
+*.pem
+*.crt
+*.p12
+secrets.json
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
